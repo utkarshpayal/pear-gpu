@@ -1,49 +1,50 @@
 import Hyperswarm from 'hyperswarm';
 import b4a from 'b4a';
-import { Terminal } from 'xterm';
-import { FitAddon } from 'xterm-addon-fit';
-
-const swarm = new Hyperswarm();
-const connections = {};
-let activePeer = null;
-let terminalSessions = {}; // Track terminal states per container
-let xterm = null; // The current terminal instance
-let fitAddon = null; // FitAddon instance
+import { startTerminal, appendTerminalOutput } from './libs/terminal.js';
 
 // DOM Elements
-const terminalModal = document.getElementById('terminal-modal');
-const terminalTitle = document.getElementById('terminal-title');
-const terminalContainer = document.getElementById('terminal-container');
-const tray = document.getElementById('tray');
 const containerList = document.getElementById('container-list');
+const connectionList = document.getElementById('connection-list');
+const addConnectionForm = document.getElementById('add-connection-form');
+const newConnectionTopic = document.getElementById('new-connection-topic');
+const connectionTitle = document.getElementById('connection-title');
+const dashboard = document.getElementById('dashboard');
+
+// Modal Elements
+const duplicateModalElement = document.getElementById('duplicateModal');
+const duplicateModal = new bootstrap.Modal(duplicateModalElement);
+const duplicateContainerForm = document.getElementById('duplicate-container-form');
+
+// Global variables
+const connections = {};
+let activePeer = null;
+window.activePeer = null; // Expose to other modules
 
 // Initialize the app
 console.log('[INFO] Client app initialized');
 
-// Add Kill Terminal button functionality
-document.getElementById('kill-terminal-btn').onclick = () => {
-  const containerId = terminalTitle.dataset.containerId;
-  if (containerId && terminalSessions[containerId]) {
-    console.log(`[INFO] Killing terminal session for container: ${containerId}`);
-    
-    // Send kill command to server
-    window.sendCommand('killTerminal', { containerId });
-
-    // Clean up terminal state
-    terminalModal.style.display = 'none';
-    delete terminalSessions[containerId];
-    xterm.dispose(); // Dispose of the current terminal instance
-    xterm = null; // Reset xterm instance
-  } else {
-    console.error('[ERROR] No terminal session found to kill.');
-  }
-};
+// Collapse Sidebar Functionality
+const collapseSidebarBtn = document.getElementById('collapse-sidebar-btn');
+collapseSidebarBtn.addEventListener('click', () => {
+  const sidebar = document.getElementById('sidebar');
+  sidebar.classList.toggle('collapsed');
+  const btn = collapseSidebarBtn;
+  btn.innerHTML = sidebar.classList.contains('collapsed') ? '&gt;' : '&lt;';
+});
 
 // Add a new connection
-document.getElementById('add-connection-form').addEventListener('submit', (e) => {
+addConnectionForm.addEventListener('submit', (e) => {
   e.preventDefault();
 
-  const topicHex = document.getElementById('new-connection-topic').value;
+  const topicHex = newConnectionTopic.value.trim();
+  if (topicHex) {
+    addConnection(topicHex);
+    newConnectionTopic.value = '';
+  }
+});
+
+// Function to add a new connection
+function addConnection(topicHex) {
   const topic = b4a.from(topicHex, 'hex');
   const topicId = topicHex.substring(0, 12);
 
@@ -55,14 +56,27 @@ document.getElementById('add-connection-form').addEventListener('submit', (e) =>
   connectionItem.innerHTML = `
     <span class="connection-status status-disconnected"></span>${topicId}
   `;
-  connectionItem.addEventListener('click', () => window.switchConnection(topicId));
-  document.getElementById('connection-list').appendChild(connectionItem);
+  connectionItem.addEventListener('click', () => switchConnection(topicId));
+  connectionList.appendChild(connectionItem);
 
-  connections[topicId] = { topic, peer: null };
+  connections[topicId] = { topic, peer: null, swarm: null };
+
+  // Create a new swarm for this connection
+  const swarm = new Hyperswarm();
+  connections[topicId].swarm = swarm;
 
   swarm.join(topic, { client: true, server: false });
+
   swarm.on('connection', (peer) => {
     console.log(`[INFO] Connected to peer for topic: ${topicHex}`);
+
+    // Prevent duplicate connections
+    if (connections[topicId].peer) {
+      console.warn(`[WARN] Duplicate connection detected for topic: ${topicId}. Closing.`);
+      peer.destroy();
+      return;
+    }
+
     connections[topicId].peer = peer;
     updateConnectionStatus(topicId, true);
 
@@ -72,9 +86,20 @@ document.getElementById('add-connection-form').addEventListener('submit', (e) =>
         console.log(`[DEBUG] Received data from server: ${JSON.stringify(response)}`);
 
         if (response.type === 'containers') {
-          renderContainers(response.data);
+          if (window.activePeer === peer) {
+            renderContainers(response.data);
+          }
         } else if (response.type === 'terminalOutput') {
-          appendTerminalOutput(response.data, response.containerId);
+          appendTerminalOutput(response.data, response.containerId, response.encoding);
+        } else if (response.type === 'containerConfig') {
+          if (window.inspectContainerCallback) {
+            window.inspectContainerCallback(response.data);
+            window.inspectContainerCallback = null; // Reset the callback
+          }
+        } else if (response.type === 'stats') {
+          updateContainerStats(response.data);
+        } else if (response.error) {
+          console.log(`Error: ${response.error}`);
         }
       } catch (err) {
         console.error(`[ERROR] Failed to parse data from server: ${err.message}`);
@@ -84,41 +109,50 @@ document.getElementById('add-connection-form').addEventListener('submit', (e) =>
     peer.on('close', () => {
       console.log(`[INFO] Disconnected from peer for topic: ${topicHex}`);
       updateConnectionStatus(topicId, false);
-    });
-  });
-});
+      connections[topicId].peer = null; // Clear the peer reference
 
-// Collapse/Expand Sidebar
-document.getElementById('collapse-sidebar-btn').addEventListener('click', () => {
-  const sidebar = document.getElementById('sidebar');
-  sidebar.classList.toggle('collapsed');
-  const btn = document.getElementById('collapse-sidebar-btn');
-  btn.textContent = sidebar.classList.contains('collapsed') ? '>' : '<';
-});
+      if (window.activePeer === peer) {
+        window.activePeer = null;
+        connectionTitle.textContent = 'Disconnected';
+        dashboard.classList.add('hidden');
+        containerList.innerHTML = '';
+      }
+    });
+
+    // If this is the first connection, switch to it
+    if (!window.activePeer) {
+      switchConnection(topicId);
+    }
+  });
+}
 
 // Update connection status
 function updateConnectionStatus(topicId, isConnected) {
   const connectionItem = document.querySelector(`[data-topic-id="${topicId}"] .connection-status`);
-  connectionItem.className = `connection-status ${isConnected ? 'status-connected' : 'status-disconnected'}`;
+  if (connectionItem) {
+    connectionItem.className = `connection-status ${isConnected ? 'status-connected' : 'status-disconnected'}`;
+  }
 }
 
 // Switch between connections
 function switchConnection(topicId) {
-  activePeer = connections[topicId].peer;
-  const connectionTitle = document.getElementById('connection-title');
-  if (!connectionTitle) {
-    console.error('[ERROR] Connection title element is missing.');
+  const connection = connections[topicId];
+  if (!connection) {
+    console.error(`[ERROR] No connection found for topicId: ${topicId}`);
     return;
   }
-  connectionTitle.textContent = `Connection: ${topicId}`;
-  document.getElementById('dashboard').classList.remove('hidden');
 
-  if (activePeer) {
-    console.log('[INFO] Sending "listContainers" command');
-    window.sendCommand('listContainers');
-  } else {
-    console.error('[ERROR] No active peer to send command.');
+  if (!connection.peer) {
+    console.error('[ERROR] No active peer for this connection.');
+    return;
   }
+
+  window.activePeer = connection.peer;
+  connectionTitle.textContent = `Connection: ${topicId}`;
+  dashboard.classList.remove('hidden');
+
+  console.log('[INFO] Sending "listContainers" command');
+  sendCommand('listContainers');
 }
 
 // Attach switchConnection to the global window object
@@ -126,10 +160,10 @@ window.switchConnection = switchConnection;
 
 // Send a command to the active peer
 function sendCommand(command, args = {}) {
-  if (activePeer) {
+  if (window.activePeer) {
     const message = JSON.stringify({ command, args });
     console.log(`[DEBUG] Sending command to server: ${message}`);
-    activePeer.write(message);
+    window.activePeer.write(message);
   } else {
     console.error('[ERROR] No active peer to send command.');
   }
@@ -140,110 +174,165 @@ window.sendCommand = sendCommand;
 
 // Render the container list
 function renderContainers(containers) {
-  console.log(`[INFO] Rendering ${containers.length} containers`);
-  containerList.innerHTML = '';
+    console.log(`[INFO] Rendering ${containers.length} containers`);
+    containerList.innerHTML = ''; // Clear the current list
+  
+    containers.forEach((container) => {
+      const name = container.Names[0].replace(/^\//, ''); // Remove leading slash from container names
+      const image = container.Image;
+      const containerId = container.Id;
+      const row = document.createElement('tr');
+      row.dataset.containerId = containerId; // Store container ID for reference
+      row.innerHTML = `
+        <td>${name}</td>
+        <td>${image}</td>
+        <td>${container.State}</td>
+        <td class="cpu">0</td>
+        <td class="memory">0</td>
+        <td class="ip-address">-</td>
+        <td>
+          <button class="btn btn-success btn-sm action-start" ${container.State === 'running' ? 'disabled' : ''}>Start</button>
+          <button class="btn btn-warning btn-sm action-stop" ${container.State !== 'running' ? 'disabled' : ''}>Stop</button>
+          <button class="btn btn-danger btn-sm action-remove">Remove</button>
+          <button class="btn btn-primary btn-sm action-terminal" ${container.State !== 'running' ? 'disabled' : ''}>Terminal</button>
+          <button class="btn btn-secondary btn-sm action-duplicate">Duplicate</button>
+        </td>
+      `;
+      containerList.appendChild(row);
+  
+      // Add event listeners for action buttons
+      addActionListeners(row, container);
+  
+      // Add event listener for duplicate button
+      const duplicateBtn = row.querySelector('.action-duplicate');
+      duplicateBtn.addEventListener('click', () => openDuplicateModal(container));
+    });
+  }
+  
 
-  containers.forEach((container) => {
-    const name = container.Names[0].replace(/^\//, ''); // Remove leading slash from container names
-    const row = document.createElement('tr');
-    row.innerHTML = `
-      <td>${name}</td>
-      <td>${container.State}</td>
-      <td>
-        <button class="btn btn-success btn-sm" onclick="window.sendCommand('startContainer', { id: '${container.Id}' })">Start</button>
-        <button class="btn btn-warning btn-sm" onclick="window.sendCommand('stopContainer', { id: '${container.Id}' })">Stop</button>
-        <button class="btn btn-danger btn-sm" onclick="window.sendCommand('removeContainer', { id: '${container.Id}' })">Remove</button>
-        <button class="btn btn-info btn-sm" onclick="window.startTerminal('${container.Id}', '${name}')">Terminal</button>
-      </td>
-    `;
-    containerList.appendChild(row);
+// Add event listeners to action buttons
+function addActionListeners(row, container) {
+  const startBtn = row.querySelector('.action-start');
+  const stopBtn = row.querySelector('.action-stop');
+  const removeBtn = row.querySelector('.action-remove');
+  const terminalBtn = row.querySelector('.action-terminal');
+
+  startBtn.addEventListener('click', () => {
+    sendCommand('startContainer', { id: container.Id });
+  });
+
+  stopBtn.addEventListener('click', () => {
+    sendCommand('stopContainer', { id: container.Id });
+  });
+
+  removeBtn.addEventListener('click', () => {
+    sendCommand('removeContainer', { id: container.Id });
+  });
+
+  terminalBtn.addEventListener('click', () => {
+    startTerminal(container.Id, container.Names[0] || container.Id);
   });
 }
 
-// Initialize Xterm.js terminal
-function initializeTerminal() {
-  if (xterm) {
-    xterm.dispose(); // Dispose existing terminal instance
+// Function to update container statistics
+function updateContainerStats(stats) {
+    console.log(`[DEBUG] Updating stats for container ID: ${stats.id}`);
+    let row = containerList.querySelector(`tr[data-container-id="${stats.id}"]`);
+  
+    if (!row) {
+      console.warn(`[WARN] No row found for container ID: ${stats.id}. Adding a placeholder.`);
+      // Create a placeholder row if it doesn't exist
+      row = document.createElement('tr');
+      row.dataset.containerId = stats.id;
+      row.innerHTML = `
+        <td>Unknown</td>
+        <td>-</td>
+        <td>-</td>
+        <td class="cpu">0</td>
+        <td class="memory">0</td>
+        <td class="ip-address">-</td>
+        <td>-</td>
+      `;
+      containerList.appendChild(row);
+    }
+  
+    row.querySelector('.cpu').textContent = stats.cpu.toFixed(2);
+    row.querySelector('.memory').textContent = (stats.memory / (1024 * 1024)).toFixed(2);
+    row.querySelector('.ip-address').textContent = stats.ip || '-';
   }
-  xterm = new Terminal({ cursorBlink: true, theme: { background: '#000000', foreground: '#ffffff' } });
-  fitAddon = new FitAddon(); // Create a new FitAddon instance
-  xterm.loadAddon(fitAddon);
 
-  xterm.open(terminalContainer);
-  setTimeout(() => fitAddon.fit(), 10); // Ensure terminal fits properly after rendering
-  xterm.write('\x1b[1;32mWelcome to the Docker Terminal\x1b[0m\r\n');
+// Function to open the Duplicate Modal with container configurations
+function openDuplicateModal(container) {
+    console.log(`[INFO] Opening Duplicate Modal for container: ${container.Id}`);
+  
+    // Send a command to get container configurations
+    sendCommand('inspectContainer', { id: container.Id });
+  
+    // Listen for the response
+    window.inspectContainerCallback = (config) => {
+      if (!config) {
+        alert('Failed to retrieve container configuration.');
+        return;
+      }
+  
+      // Populate the modal fields with the current configurations
+      document.getElementById('container-name').value = config.Name.replace(/^\//, '');
+      document.getElementById('container-image').value = config.Config.Image;
+      document.getElementById('container-config').value = JSON.stringify(config, null, 2);
+  
+      // Show the modal
+      duplicateModal.show();
+    };
+  }
+  
 
-  // Adjust terminal size dynamically when the window is resized
-  window.addEventListener('resize', () => {
-    fitAddon.fit();
+// Handle the Duplicate Container Form Submission
+duplicateContainerForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+  
+    const name = document.getElementById('container-name').value.trim();
+    const image = document.getElementById('container-image').value.trim();
+    const configJSON = document.getElementById('container-config').value.trim();
+  
+    let config;
+    try {
+      config = JSON.parse(configJSON);
+    } catch (err) {
+      alert('Invalid JSON in configuration.');
+      return;
+    }
+  
+    console.log(`[INFO] Sending duplicateContainer command for name: ${name}`);
+    
+    // Send the duplicate command to the server
+    sendCommand('duplicateContainer', { name, config });
+  
+    // Close the modal
+    duplicateModal.hide();
+  
+    // Notify the user
+    alert('Duplicate command sent.');
+  
+    // Trigger container list update after a short delay
+    setTimeout(() => {
+      console.log('[INFO] Fetching updated container list after duplication');
+      sendCommand('listContainers');
+    }, 2000); // Wait for duplication to complete
   });
-}
-
-// Start terminal session
-function startTerminal(containerId, containerName) {
-  if (!activePeer) {
-    console.error('[ERROR] No active peer for terminal.');
-    return;
-  }
-
-  if (!terminalSessions[containerId]) {
-    terminalSessions[containerId] = { output: '' }; // Initialize terminal state
-  }
-
-  const session = terminalSessions[containerId];
-  initializeTerminal();
-  xterm.write(session.output);
-
-  terminalModal.style.display = 'flex';
-  terminalTitle.dataset.containerId = containerId;
-  terminalTitle.textContent = `Container Terminal: ${containerName}`;
-
-  console.log(`[INFO] Starting terminal for container: ${containerId}`);
-  activePeer.write(JSON.stringify({ command: 'startTerminal', args: { containerId } }));
-
-  xterm.onData((data) => {
-    console.log(`[DEBUG] Sending terminal input: ${data}`);
-
-    activePeer.write(JSON.stringify({ type: 'terminalInput', data }));
-  });
-
-  document.getElementById('minimize-terminal-btn').onclick = () => {
-    terminalModal.style.display = 'none';
-    addToTray(containerId); // Minimize to tray
-  };
-}
-
+  
+  
 // Attach startTerminal to the global window object
 window.startTerminal = startTerminal;
 
-// Append terminal output
-function appendTerminalOutput(data, containerId) {
-  if (!terminalSessions[containerId]) {
-    console.error(`[ERROR] No terminal session found for container: ${containerId}`);
-    return;
+// Handle window unload to clean up swarms and peers
+window.addEventListener('beforeunload', () => {
+  for (const topicId in connections) {
+    const connection = connections[topicId];
+    if (connection.peer) {
+      connection.peer.destroy();
+    }
+    if (connection.swarm) {
+      connection.swarm.destroy();
+    }
   }
-
-  console.log(`[DEBUG] Appending terminal output: ${data}`);
-  const session = terminalSessions[containerId];
-  session.output += data;
-  if (terminalTitle.dataset.containerId === containerId) {
-    xterm.write(data);
-  }
-}
-
-// Add terminal to tray
-function addToTray(containerId) {
-  let trayItem = document.querySelector(`.tray-item[data-id="${containerId}"]`);
-  if (!trayItem) {
-    trayItem = document.createElement('div');
-    trayItem.className = 'tray-item';
-    trayItem.dataset.id = containerId;
-    trayItem.textContent = `Terminal: ${containerId}`;
-    trayItem.onclick = () => {
-      terminalModal.style.display = 'flex';
-      xterm.write(terminalSessions[containerId].output);
-      setTimeout(() => fitAddon.fit(), 10); // Ensure proper resize
-    };
-    tray.appendChild(trayItem);
-  }
-}
+});
