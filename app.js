@@ -203,10 +203,7 @@ function startTerminal(containerId, containerName) {
 
   xterm.onData((data) => {
     console.log(`[DEBUG] Sending terminal input: ${data}`);
-    if (data === '\u001b[2;5R') {
-      fitAddon.fit();
-      return;
-    }
+
     activePeer.write(JSON.stringify({ type: 'terminalInput', data }));
   });
 
