@@ -1,0 +1,36 @@
+{
+  "name": "peartainer",
+  "main": "index.html",
+  "pear": {
+    "name": "peartainer",
+    "type": "desktop",
+    "gui": {
+      "backgroundColor": "#1F2430",
+      "height": "540",
+      "width": "720"
+    },
+    "links": [
+      "http://127.0.0.1",
+      "http://localhost",
+      "https://ka-f.fontawesome.com",
+      "https://cdn.jsdelivr.net",
+      "https://cdnjs.cloudflare.com",
+      "ws://localhost:8080"
+    ]
+  },
+  "type": "module",
+  "license": "Apache-2.0",
+  "scripts": {
+    "dev": "pear run -d .",
+    "test": "brittle test/*.test.js"
+  },
+  "devDependencies": {
+    "brittle": "^3.0.0",
+    "pear-interface": "^1.0.0"
+  },
+  "dependencies": {
+    "hyperswarm": "^4.8.4",
+    "xterm": "^5.3.0",
+    "xterm-addon-fit": "^0.8.0"
+  }
+}
