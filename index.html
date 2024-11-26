@@ -104,11 +104,11 @@
       align-items: center;
     }
     #terminal-container {
-    flex: 1;
-    overflow: hidden; /* Ensure no scrollbars appear */
-    background-color: black;
-    color: white;
-  }
+      flex: 1;
+      overflow: hidden;
+      background-color: black;
+      color: white;
+    }
     #tray {
       position: fixed;
       bottom: 0;
@@ -165,7 +165,10 @@
   <div id="terminal-modal">
     <div class="header">
       <span id="terminal-title"></span>
-      <button id="minimize-terminal-btn" class="btn btn-sm btn-secondary">Minimize</button>
+      <div>
+        <button id="kill-terminal-btn" class="btn btn-sm btn-danger">Kill Terminal</button>
+        <button id="minimize-terminal-btn" class="btn btn-sm btn-secondary">Minimize</button>
+      </div>
     </div>
     <div id="terminal-container"></div>
   </div>

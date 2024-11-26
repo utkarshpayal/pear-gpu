@@ -20,6 +20,25 @@ const containerList = document.getElementById('container-list');
 // Initialize the app
 console.log('[INFO] Client app initialized');
 
+// Add Kill Terminal button functionality
+document.getElementById('kill-terminal-btn').onclick = () => {
+  const containerId = terminalTitle.dataset.containerId;
+  if (containerId && terminalSessions[containerId]) {
+    console.log(`[INFO] Killing terminal session for container: ${containerId}`);
+    
+    // Send kill command to server
+    window.sendCommand('killTerminal', { containerId });
+
+    // Clean up terminal state
+    terminalModal.style.display = 'none';
+    delete terminalSessions[containerId];
+    xterm.dispose(); // Dispose of the current terminal instance
+    xterm = null; // Reset xterm instance
+  } else {
+    console.error('[ERROR] No terminal session found to kill.');
+  }
+};
+
 // Add a new connection
 document.getElementById('add-connection-form').addEventListener('submit', (e) => {
   e.preventDefault();
@@ -134,7 +153,7 @@ function renderContainers(containers) {
         <button class="btn btn-success btn-sm" onclick="window.sendCommand('startContainer', { id: '${container.Id}' })">Start</button>
         <button class="btn btn-warning btn-sm" onclick="window.sendCommand('stopContainer', { id: '${container.Id}' })">Stop</button>
         <button class="btn btn-danger btn-sm" onclick="window.sendCommand('removeContainer', { id: '${container.Id}' })">Remove</button>
-        <button class="btn btn-info btn-sm" onclick="window.startTerminal('${container.Id}')">Terminal</button>
+        <button class="btn btn-info btn-sm" onclick="window.startTerminal('${container.Id}', '${name}')">Terminal</button>
       </td>
     `;
     containerList.appendChild(row);
@@ -161,7 +180,7 @@ function initializeTerminal() {
 }
 
 // Start terminal session
-function startTerminal(containerId) {
+function startTerminal(containerId, containerName) {
   if (!activePeer) {
     console.error('[ERROR] No active peer for terminal.');
     return;
@@ -176,13 +195,18 @@ function startTerminal(containerId) {
   xterm.write(session.output);
 
   terminalModal.style.display = 'flex';
-  terminalTitle.textContent = `Container Terminal: ${containerId}`;
+  terminalTitle.dataset.containerId = containerId;
+  terminalTitle.textContent = `Container Terminal: ${containerName}`;
 
   console.log(`[INFO] Starting terminal for container: ${containerId}`);
   activePeer.write(JSON.stringify({ command: 'startTerminal', args: { containerId } }));
 
   xterm.onData((data) => {
     console.log(`[DEBUG] Sending terminal input: ${data}`);
+    if (data === '\u001b[2;5R') {
+      fitAddon.fit();
+      return;
+    }
     activePeer.write(JSON.stringify({ type: 'terminalInput', data }));
   });
 
@@ -205,7 +229,7 @@ function appendTerminalOutput(data, containerId) {
   console.log(`[DEBUG] Appending terminal output: ${data}`);
   const session = terminalSessions[containerId];
   session.output += data;
-  if (terminalTitle.textContent.includes(containerId)) {
+  if (terminalTitle.dataset.containerId === containerId) {
     xterm.write(data);
   }
 }
