@@ -4,8 +4,9 @@ import Hyperswarm from 'hyperswarm';
 import Docker from 'dockerode';
 import crypto from 'hypercore-crypto';
 import { PassThrough } from 'stream';
+import os from "os";
 
-const docker = new Docker({ socketPath: '/var/run/docker.sock' });
+const docker = new Docker({ socketPath: os.platform() === "win32" ? '//./pipe/dockerDesktopLinuxEngine' : '/var/run/docker.sock' });
 const swarm = new Hyperswarm();
 const connectedPeers = new Set();
 const terminalSessions = new Map(); // Map to track terminal sessions per peer
