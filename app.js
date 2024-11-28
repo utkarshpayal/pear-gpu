@@ -45,86 +45,185 @@ addConnectionForm.addEventListener('submit', (e) => {
 
 // Function to add a new connection
 function addConnection(topicHex) {
-  const topic = b4a.from(topicHex, 'hex');
-  const topicId = topicHex.substring(0, 12);
+    const topic = b4a.from(topicHex, 'hex');
+    const topicId = topicHex.substring(0, 12);
+  
+    console.log(`[INFO] Adding connection with topic: ${topicHex}`);
+  
+    const connectionItem = document.createElement('li');
+    connectionItem.className = 'list-group-item d-flex align-items-center justify-content-between';
+    connectionItem.dataset.topicId = topicId;
+    connectionItem.innerHTML = `
+      <span>
+        <span class="connection-status status-disconnected"></span>${topicId}
+      </span>
+  <button class="btn btn-sm btn-danger disconnect-btn">
+  <i class="fas fa-plug"></i>
+</button>
+    `;
+  
+    // Add click event to switch connection
+    connectionItem.querySelector('span').addEventListener('click', () => switchConnection(topicId));
+  
+    // Add click event to the disconnect button
+    const disconnectBtn = connectionItem.querySelector('.disconnect-btn');
+    disconnectBtn.addEventListener('click', (e) => {
+      e.stopPropagation(); // Prevent triggering the switch connection event
+      disconnectConnection(topicId, connectionItem);
+    });
+  
+    connectionList.appendChild(connectionItem);
+  
+    connections[topicId] = { topic, peer: null, swarm: null };
+  
+    // Create a new swarm for this connection
+    const swarm = new Hyperswarm();
+    connections[topicId].swarm = swarm;
+  
+    swarm.join(topic, { client: true, server: false });
+  
+    swarm.on('connection', (peer) => {
+      console.log(`[INFO] Connected to peer for topic: ${topicHex}`);
+  
+      // Prevent duplicate connections
+      if (connections[topicId].peer) {
+        console.warn(`[WARN] Duplicate connection detected for topic: ${topicId}. Closing.`);
+        peer.destroy();
+        return;
+      }
+  
+      connections[topicId].peer = peer;
+      updateConnectionStatus(topicId, true);
+  
 
-  console.log(`[INFO] Adding connection with topic: ${topicHex}`);
+      function handlePeerData(data, topicId, peer) {
+        try {
+          const response = JSON.parse(data.toString());
+          console.log(`[DEBUG] Received data from peer (topic: ${topicId}): ${JSON.stringify(response)}`);
+      
+          if (response.type === 'containers') {
+            if (window.activePeer === peer) {
+              renderContainers(response.data);
+            }
+          } else if (response.type === 'terminalOutput') {
+            appendTerminalOutput(response.data, response.containerId, response.encoding);
+          } else if (response.type === 'containerConfig') {
+            if (window.inspectContainerCallback) {
+              window.inspectContainerCallback(response.data);
+              window.inspectContainerCallback = null; // Reset the callback
+            }
+          } else if (response.type === 'stats') {
+            updateContainerStats(response.data);
+          } else if (response.error) {
+            console.error(`[ERROR] Server error: ${response.error}`);
+          }
+        } catch (err) {
+          console.error(`[ERROR] Failed to parse data from peer (topic: ${topicId}): ${err.message}`);
+        }
+      }
 
-  const connectionItem = document.createElement('li');
-  connectionItem.className = 'list-group-item d-flex align-items-center';
-  connectionItem.dataset.topicId = topicId;
-  connectionItem.innerHTML = `
-    <span class="connection-status status-disconnected"></span>${topicId}
-  `;
-  connectionItem.addEventListener('click', () => switchConnection(topicId));
-  connectionList.appendChild(connectionItem);
+      peer.on('data', (data) => {
+        // Handle incoming data
+        handlePeerData(data, topicId, peer);
+      });
+  
+      peer.on('close', () => {
+        console.log(`[INFO] Disconnected from peer for topic: ${topicHex}`);
+        updateConnectionStatus(topicId, false);
+        connections[topicId].peer = null; // Clear the peer reference
+  
+        if (window.activePeer === peer) {
+          window.activePeer = null;
+          connectionTitle.textContent = 'Disconnected';
+          dashboard.classList.add('hidden');
+          containerList.innerHTML = '';
+        }
+      });
+  
+      // If this is the first connection, switch to it
+      if (!window.activePeer) {
+        switchConnection(topicId);
+      }
+    });
+  }
 
-  connections[topicId] = { topic, peer: null, swarm: null };
-
-  // Create a new swarm for this connection
-  const swarm = new Hyperswarm();
-  connections[topicId].swarm = swarm;
-
-  swarm.join(topic, { client: true, server: false });
-
-  swarm.on('connection', (peer) => {
-    console.log(`[INFO] Connected to peer for topic: ${topicHex}`);
-
-    // Prevent duplicate connections
-    if (connections[topicId].peer) {
-      console.warn(`[WARN] Duplicate connection detected for topic: ${topicId}. Closing.`);
-      peer.destroy();
+  function disconnectConnection(topicId, connectionItem) {
+    const connection = connections[topicId];
+    if (!connection) {
+      console.error(`[ERROR] No connection found for topicId: ${topicId}`);
       return;
     }
-
-    connections[topicId].peer = peer;
-    updateConnectionStatus(topicId, true);
-
-    peer.on('data', (data) => {
-      try {
-        const response = JSON.parse(data.toString());
-        console.log(`[DEBUG] Received data from server: ${JSON.stringify(response)}`);
-
-        if (response.type === 'containers') {
-          if (window.activePeer === peer) {
-            renderContainers(response.data);
-          }
-        } else if (response.type === 'terminalOutput') {
-          appendTerminalOutput(response.data, response.containerId, response.encoding);
-        } else if (response.type === 'containerConfig') {
-          if (window.inspectContainerCallback) {
-            window.inspectContainerCallback(response.data);
-            window.inspectContainerCallback = null; // Reset the callback
-          }
-        } else if (response.type === 'stats') {
-          updateContainerStats(response.data);
-        } else if (response.error) {
-          console.log(`Error: ${response.error}`);
-        }
-      } catch (err) {
-        console.error(`[ERROR] Failed to parse data from server: ${err.message}`);
-      }
-    });
-
-    peer.on('close', () => {
-      console.log(`[INFO] Disconnected from peer for topic: ${topicHex}`);
-      updateConnectionStatus(topicId, false);
-      connections[topicId].peer = null; // Clear the peer reference
-
-      if (window.activePeer === peer) {
-        window.activePeer = null;
-        connectionTitle.textContent = 'Disconnected';
-        dashboard.classList.add('hidden');
-        containerList.innerHTML = '';
-      }
-    });
-
-    // If this is the first connection, switch to it
-    if (!window.activePeer) {
-      switchConnection(topicId);
+  
+    // Disconnect the peer and destroy the swarm
+    if (connection.peer) {
+      connection.peer.destroy();
+      connection.peer = null;
     }
-  });
-}
+    if (connection.swarm) {
+      connection.swarm.destroy();
+      connection.swarm = null;
+    }
+  
+    // Remove the connection from the global connections object
+    delete connections[topicId];
+  
+    // Remove the connection item from the list
+    connectionList.removeChild(connectionItem);
+  
+    console.log(`[INFO] Disconnected and removed connection: ${topicId}`);
+  
+    // Reset active peer if it was the disconnected connection
+      window.activePeer = null;
+      connectionTitle.textContent = 'Choose a Connection'; // Reset title
+      dashboard.classList.add('hidden');
+      containerList.innerHTML = ''; // Clear the container list
+    
+  
+    // Ensure the container list is cleared regardless of the active connection
+    resetContainerList();
+  
+    // Refresh the connections view
+    resetConnectionsView();
+  }
+  
+  // Function to reset the container list
+  function resetContainerList() {
+    containerList.innerHTML = ''; // Clear the existing list
+    console.log('[INFO] Container list cleared.');
+  }
+  
+  // Function to reset the connections view
+  function resetConnectionsView() {
+    // Clear the connection list
+    connectionList.innerHTML = '';
+  
+    // Re-populate the connection list from the `connections` object
+    Object.keys(connections).forEach((topicId) => {
+      const connectionItem = document.createElement('li');
+      connectionItem.className = 'list-group-item d-flex align-items-center justify-content-between';
+      connectionItem.dataset.topicId = topicId;
+      connectionItem.innerHTML = `
+        <span>
+          <span class="connection-status ${connections[topicId].peer ? 'status-connected' : 'status-disconnected'}"></span>${topicId}
+        </span>
+        <button class="btn btn-sm btn-danger disconnect-btn">Disconnect</button>
+      `;
+  
+      // Add click event to switch connection
+      connectionItem.querySelector('span').addEventListener('click', () => switchConnection(topicId));
+  
+      // Add click event to the disconnect button
+      const disconnectBtn = connectionItem.querySelector('.disconnect-btn');
+      disconnectBtn.addEventListener('click', (e) => {
+        e.stopPropagation(); // Prevent triggering the switch connection event
+        disconnectConnection(topicId, connectionItem);
+      });
+  
+      connectionList.appendChild(connectionItem);
+    });
+  
+    console.log('[INFO] Connections view reset.');
+  }
 
 // Update connection status
 function updateConnectionStatus(topicId, isConnected) {
@@ -136,24 +235,26 @@ function updateConnectionStatus(topicId, isConnected) {
 
 // Switch between connections
 function switchConnection(topicId) {
-  const connection = connections[topicId];
-  if (!connection) {
-    console.error(`[ERROR] No connection found for topicId: ${topicId}`);
-    return;
+    const connection = connections[topicId];
+    if (!connection) {
+      console.error(`[ERROR] No connection found for topicId: ${topicId}`);
+      connectionTitle.textContent = 'Choose a Connection'; // Default message
+      return;
+    }
+  
+    if (!connection.peer) {
+      console.error('[ERROR] No active peer for this connection.');
+      connectionTitle.textContent = 'Choose a Connection'; // Default message
+      return;
+    }
+  
+    window.activePeer = connection.peer;
+    connectionTitle.textContent = `Connection: ${topicId}`;
+    dashboard.classList.remove('hidden');
+  
+    console.log('[INFO] Sending "listContainers" command');
+    sendCommand('listContainers');
   }
-
-  if (!connection.peer) {
-    console.error('[ERROR] No active peer for this connection.');
-    return;
-  }
-
-  window.activePeer = connection.peer;
-  connectionTitle.textContent = `Connection: ${topicId}`;
-  dashboard.classList.remove('hidden');
-
-  console.log('[INFO] Sending "listContainers" command');
-  sendCommand('listContainers');
-}
 
 // Attach switchConnection to the global window object
 window.switchConnection = switchConnection;
@@ -309,9 +410,6 @@ duplicateContainerForm.addEventListener('submit', (e) => {
   
     // Close the modal
     duplicateModal.hide();
-  
-    // Notify the user
-    alert('Duplicate command sent.');
   
     // Trigger container list update after a short delay
     setTimeout(() => {

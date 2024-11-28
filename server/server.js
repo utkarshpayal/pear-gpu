@@ -3,6 +3,7 @@
 import Hyperswarm from 'hyperswarm';
 import Docker from 'dockerode';
 import crypto from 'hypercore-crypto';
+import { PassThrough } from 'stream';
 
 const docker = new Docker({ socketPath: '/var/run/docker.sock' });
 const swarm = new Hyperswarm();
@@ -80,8 +81,9 @@ swarm.on('connection', (peer) => {
           break;
 
         default:
-          console.warn(`[WARN] Unknown command: ${parsedData.command}`);
-          response = { error: 'Unknown command' };
+          // console.warn(`[WARN] Unknown command: ${parsedData.command}`);
+          // response = { error: 'Unknown command' };
+          return
       }
 
       // Send response if one was generated
@@ -95,9 +97,15 @@ swarm.on('connection', (peer) => {
     }
   });
 
+  peer.on('error', (err) => {
+    console.error(`[ERROR] Peer connection error: ${err.message}`);
+    cleanupPeer(peer);
+  });
+
   peer.on('close', () => {
     console.log('[INFO] Peer disconnected');
     connectedPeers.delete(peer);
+    cleanupPeer(peer)
 
     // Clean up any terminal session associated with this peer
     if (terminalSessions.has(peer)) {
@@ -109,6 +117,19 @@ swarm.on('connection', (peer) => {
     }
   });
 });
+
+// Helper function to handle peer cleanup
+function cleanupPeer(peer) {
+  connectedPeers.delete(peer);
+
+  if (terminalSessions.has(peer)) {
+    const session = terminalSessions.get(peer);
+    console.log(`[INFO] Cleaning up terminal session for container: ${session.containerId}`);
+    session.stream.end();
+    peer.removeListener('data', session.onData);
+    terminalSessions.delete(peer);
+  }
+}
 
 // Function to duplicate a container
 async function duplicateContainer(name, config, peer) {
@@ -143,20 +164,29 @@ async function duplicateContainer(name, config, peer) {
     // Start the new container
     await newContainer.start();
 
-    // Send success response
+    // Send success response to the requesting peer
     peer.write(JSON.stringify({ success: true, message: `Container '${newName}' duplicated and started successfully.` }));
 
-    // List containers again to update the client
+    // Get the updated list of containers
     const containers = await docker.listContainers({ all: true });
     const update = { type: 'containers', data: containers };
+
+    // Broadcast the updated container list to all connected peers
     for (const connectedPeer of connectedPeers) {
       connectedPeer.write(JSON.stringify(update));
+    }
+
+    // Start streaming stats for the new container
+    const newContainerInfo = containers.find(c => c.Names.includes(`/${newName}`));
+    if (newContainerInfo) {
+      streamContainerStats(newContainerInfo);
     }
   } catch (err) {
     console.error(`[ERROR] Failed to duplicate container: ${err.message}`);
     peer.write(JSON.stringify({ error: `Failed to duplicate container: ${err.message}` }));
   }
 }
+
 
 // Stream Docker events to all peers
 docker.getEvents({}, (err, stream) => {
@@ -195,7 +225,6 @@ docker.listContainers({ all: true }, (err, containers) => {
     const container = docker.getContainer(containerInfo.Id);
     container.stats({ stream: true }, (err, stream) => {
       if (err) {
-        console.error(`[ERROR] Failed to get stats for container ${containerInfo.Id}: ${err.message}`);
         return;
       }
 
@@ -219,12 +248,10 @@ docker.listContainers({ all: true }, (err, containers) => {
             peer.write(JSON.stringify({ type: 'stats', data: statsData }));
           }
         } catch (err) {
-          console.error(`[ERROR] Failed to parse stats for container ${containerInfo.Id}: ${err.message}`);
         }
       });
 
       stream.on('error', (err) => {
-        console.error(`[ERROR] Stats stream error for container ${containerInfo.Id}: ${err.message}`);
       });
     });
   });
@@ -242,6 +269,7 @@ function calculateCPUPercent(stats) {
 }
 
 // Function to handle terminal sessions
+// Function to handle terminal sessions
 async function handleTerminal(containerId, peer) {
   const container = docker.getContainer(containerId);
 
@@ -258,16 +286,18 @@ async function handleTerminal(containerId, peer) {
 
     console.log(`[INFO] Terminal session started for container: ${containerId}`);
 
+    const stdout = new PassThrough();
+    const stderr = new PassThrough();
+
+    container.modem.demuxStream(stream, stdout, stderr);
+
     const onData = (input) => {
       try {
         const parsed = JSON.parse(input.toString());
         if (parsed.type === 'terminalInput' && parsed.data) {
-          let inputData;
-          if (parsed.encoding === 'base64') {
-            inputData = Buffer.from(parsed.data, 'base64');
-          } else {
-            inputData = Buffer.from(parsed.data);
-          }
+          const inputData = parsed.encoding === 'base64'
+            ? Buffer.from(parsed.data, 'base64')
+            : Buffer.from(parsed.data);
           stream.write(inputData);
         }
       } catch (err) {
@@ -276,16 +306,22 @@ async function handleTerminal(containerId, peer) {
     };
 
     peer.on('data', onData);
-
-    // Store the session along with the onData listener
     terminalSessions.set(peer, { containerId, exec, stream, onData });
 
-    stream.on('data', (chunk) => {
-      const dataBase64 = chunk.toString('base64');
+    stdout.on('data', (chunk) => {
       peer.write(JSON.stringify({
         type: 'terminalOutput',
         containerId,
-        data: dataBase64,
+        data: chunk.toString('base64'),
+        encoding: 'base64',
+      }));
+    });
+
+    stderr.on('data', (chunk) => {
+      peer.write(JSON.stringify({
+        type: 'terminalErrorOutput',
+        containerId,
+        data: chunk.toString('base64'),
         encoding: 'base64',
       }));
     });
@@ -301,6 +337,7 @@ async function handleTerminal(containerId, peer) {
     peer.write(JSON.stringify({ error: `Failed to start terminal: ${err.message}` }));
   }
 }
+
 
 // Function to handle killing terminal sessions
 function handleKillTerminal(containerId, peer) {
@@ -322,9 +359,45 @@ function handleKillTerminal(containerId, peer) {
   }
 }
 
-// Function to duplicate a container (already defined above)
+function streamContainerStats(containerInfo) {
+  const container = docker.getContainer(containerInfo.Id);
 
-// Stream Docker events to all peers (already defined above)
+  container.stats({ stream: true }, (err, stream) => {
+    if (err) {
+      console.error(`[ERROR] Failed to get stats for container ${containerInfo.Id}: ${err.message}`);
+      return;
+    }
+
+    stream.on('data', (data) => {
+      try {
+        const stats = JSON.parse(data.toString());
+        const cpuUsage = calculateCPUPercent(stats);
+        const memoryUsage = stats.memory_stats.usage;
+        const networks = stats.networks;
+        const ipAddress = networks ? Object.values(networks)[0].IPAddress : '-';
+
+        const statsData = {
+          id: containerInfo.Id,
+          cpu: cpuUsage,
+          memory: memoryUsage,
+          ip: ipAddress,
+        };
+
+        // Broadcast stats to all connected peers
+        for (const peer of connectedPeers) {
+          peer.write(JSON.stringify({ type: 'stats', data: statsData }));
+        }
+      } catch (err) {
+        console.error(`[ERROR] Failed to parse stats for container ${containerInfo.Id}: ${err.message}`);
+      }
+    });
+
+    stream.on('error', (err) => {
+      console.error(`[ERROR] Stats stream error for container ${containerInfo.Id}: ${err.message}`);
+    });
+  });
+}
+
 
 // Handle process termination
 process.on('SIGINT', () => {
