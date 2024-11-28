@@ -396,12 +396,15 @@ function openDuplicateModal(container) {
         return;
       }
   
+      console.log("TESTER: " +  config.HostConfig?.CpusetCpus)
+      let CPUs = config.HostConfig?.CpusetCpus.split(",");
+
       // Populate the modal fields with the current configurations
       document.getElementById('container-name').value = config.Name.replace(/^\//, '');
       document.getElementById('container-hostname').value = config.Config.Hostname.replace(/^\//, '');
       document.getElementById('container-image').value = config.Config.Image;
       document.getElementById('container-netmode').value = config.HostConfig?.NetworkMode;
-      document.getElementById('container-cpu').value = config.HostConfig?.CpusetCpus;
+      document.getElementById('container-cpu').value = CPUs.length;
       document.getElementById('container-memory').value = Math.round(config.HostConfig?.Memory / (1024 * 1024));
       document.getElementById('container-config').value = JSON.stringify(config, null, 2);
   
