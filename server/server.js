@@ -44,8 +44,11 @@ swarm.on('connection', (peer) => {
 
         case 'duplicateContainer':
           console.log('[INFO] Handling \'duplicateContainer\' command');
-          const { name, config: dupConfig } = parsedData.args;
-          await duplicateContainer(name, dupConfig, peer);
+          const { name, image, hostname, netmode, cpu, memory, config: dupConfig } = parsedData.args;
+          const memoryInMB = memory * 1024 * 1024;
+          console.log("MEMEMMEMEMEMEMEMEMMEME " + memoryInMB)
+
+          await duplicateContainer(name, image, hostname, netmode, cpu, memoryInMB, dupConfig, peer);
           return; // Response is handled within the duplicateContainer function
 
         case 'startContainer':
@@ -132,7 +135,7 @@ function cleanupPeer(peer) {
 }
 
 // Function to duplicate a container
-async function duplicateContainer(name, config, peer) {
+async function duplicateContainer(name, image, hostname, netmode, cpu, memory, config, peer) {
   try {
     // Remove non-essential fields from the configuration
     const sanitizedConfig = { ...config };
@@ -144,6 +147,13 @@ async function duplicateContainer(name, config, peer) {
     delete sanitizedConfig.Path;
     delete sanitizedConfig.Args;
     delete sanitizedConfig.Image;
+    delete sanitizedConfig.Hostname;
+    delete sanitizedConfig.CpuCount;
+    delete sanitizedConfig.Memory;
+    delete sanitizedConfig.CpuShares;
+    delete sanitizedConfig.CpusetCpus;
+
+
 
     // Ensure the container has a unique name
     const newName = name;
@@ -155,12 +165,25 @@ async function duplicateContainer(name, config, peer) {
       return;
     }
 
+
+    const cpusetCpus = Array.from({ length: cpu }, (_, i) => i).join(",");
+    const nanoCpus = cpu * 1e9;
+
     // Create a new container with the provided configuration
     const newContainer = await docker.createContainer({
-      ...sanitizedConfig.Config,
-      name: newName,
-    });
+      ...sanitizedConfig.Config, // General configuration
+      name: newName,            // Container name
+      Hostname: hostname,       // Hostname for the container
+      Image: image,             // Container image
+      HostConfig: {             // Host-specific configurations
+        CpusetCpus: cpusetCpus.toString(),          // Number of CPUs
+        NanoCpus: nanoCpus,     // Restrict CPU time (e.g., 4 cores = 4e9 nanoseconds)
+        Memory: Number(memory),         // Memory limit in bytes
+        MemoryReservation: Number(memory),         // Memory limit in bytes
 
+        NetworkMode: netmode.toString(),   // Network mode
+      },
+    });
     // Start the new container
     await newContainer.start();
 

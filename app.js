@@ -398,7 +398,11 @@ function openDuplicateModal(container) {
   
       // Populate the modal fields with the current configurations
       document.getElementById('container-name').value = config.Name.replace(/^\//, '');
+      document.getElementById('container-hostname').value = config.Config.Hostname.replace(/^\//, '');
       document.getElementById('container-image').value = config.Config.Image;
+      document.getElementById('container-netmode').value = config.HostConfig?.NetworkMode;
+      document.getElementById('container-cpu').value = config.HostConfig?.CpuCount;
+      document.getElementById('container-memory').value = Math.round(config.HostConfig?.Memory / (1024 * 1024));
       document.getElementById('container-config').value = JSON.stringify(config, null, 2);
   
       // Show the modal
@@ -412,7 +416,11 @@ duplicateContainerForm.addEventListener('submit', (e) => {
     e.preventDefault();
   
     const name = document.getElementById('container-name').value.trim();
+    const hostname = document.getElementById('container-hostname').value.trim();
     const image = document.getElementById('container-image').value.trim();
+    const netmode = document.getElementById('container-netmode').value.trim();
+    const cpu = document.getElementById('container-cpu').value.trim();
+    const memory = document.getElementById('container-memory').value.trim();
     const configJSON = document.getElementById('container-config').value.trim();
   
     let config;
@@ -424,9 +432,9 @@ duplicateContainerForm.addEventListener('submit', (e) => {
     }
   
     console.log(`[INFO] Sending duplicateContainer command for name: ${name}`);
-    
+   
     // Send the duplicate command to the server
-    sendCommand('duplicateContainer', { name, config });
+    sendCommand('duplicateContainer', { name, image, hostname, netmode, cpu, memory, config });
   
     // Close the modal
     duplicateModal.hide();
