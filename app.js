@@ -17,6 +17,7 @@ const duplicateContainerForm = document.getElementById('duplicate-container-form
 
 // Global variables
 const connections = {};
+window.openTerminals = {};
 let activePeer = null;
 window.activePeer = null; // Expose to other modules
 
@@ -130,7 +131,6 @@ function addConnection(topicHex) {
       peer.on('close', () => {
         console.log(`[INFO] Disconnected from peer for topic: ${topicHex}`);
         updateConnectionStatus(topicId, false);
-        connections[topicId].peer = null; // Clear the peer reference
   
         if (window.activePeer === peer) {
           window.activePeer = null;
@@ -154,6 +154,26 @@ function addConnection(topicHex) {
       return;
     }
   
+    // Close and kill any open terminals associated with this connection
+    if (window.openTerminals[topicId]) {
+      console.log(`[INFO] Closing terminals for topic: ${topicId}`);
+      window.openTerminals[topicId].forEach((containerId) => {
+        try {
+          cleanUpTerminal(containerId); // Use the terminal.js cleanup logic
+        } catch (err) {
+          console.error(`[ERROR] Failed to kill terminal for container ${containerId}: ${err.message}`);
+        }
+      });
+      delete window.openTerminals[topicId];
+    }
+  
+    // Hide the terminal modal if it is active
+    const terminalModal = document.getElementById('terminal-modal');
+    if (terminalModal.style.display === 'flex') {
+      console.log(`[INFO] Hiding terminal modal for disconnected topic: ${topicId}`);
+      terminalModal.style.display = 'none';
+    }
+  
     // Disconnect the peer and destroy the swarm
     if (connection.peer) {
       connection.peer.destroy();
@@ -173,11 +193,12 @@ function addConnection(topicHex) {
     console.log(`[INFO] Disconnected and removed connection: ${topicId}`);
   
     // Reset active peer if it was the disconnected connection
+    if (window.activePeer === connection.peer) {
       window.activePeer = null;
       connectionTitle.textContent = 'Choose a Connection'; // Reset title
       dashboard.classList.add('hidden');
       containerList.innerHTML = ''; // Clear the container list
-    
+    }
   
     // Ensure the container list is cleared regardless of the active connection
     resetContainerList();
@@ -185,7 +206,6 @@ function addConnection(topicHex) {
     // Refresh the connections view
     resetConnectionsView();
   }
-  
   // Function to reset the container list
   function resetContainerList() {
     containerList.innerHTML = ''; // Clear the existing list
