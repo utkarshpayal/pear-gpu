@@ -30,6 +30,8 @@
   },
   "dependencies": {
     "dockernode": "^0.1.0",
+    "dockerode": "^4.0.2",
+    "dotenv": "^16.4.5",
     "hyperswarm": "^4.8.4",
     "xterm": "^5.3.0",
     "xterm-addon-fit": "^0.8.0"
