@@ -5,11 +5,29 @@ import Docker from 'dockerode';
 import crypto from 'hypercore-crypto';
 import { PassThrough } from 'stream';
 import os from "os";
-import fs from 'fs';
+import BrowserFS from 'browserfs';
 import dotenv from 'dotenv';
 
-// Load environment variables from .env file
-dotenv.config();
+// Initialize BrowserFS with LocalStorage
+BrowserFS.configure({ fs: 'LocalStorage' }, (err) => {
+  if (err) {
+    console.error('Failed to configure BrowserFS:', err);
+    throw err;
+  }
+});
+
+const fs = BrowserFS.BFSRequire('fs');
+
+// Manually load environment variables from .env file using BrowserFS
+if (fs.existsSync('.env')) {
+  const envData = fs.readFileSync('.env', 'utf-8');
+  envData.split('\n').forEach(line => {
+    const [key, value] = line.split('=');
+    if (key && value) {
+      process.env[key.trim()] = value.trim();
+    }
+  });
+}
 
 const docker = new Docker({
   socketPath: os.platform() === "win32" ? '//./pipe/dockerDesktopLinuxEngine' : '/var/run/docker.sock',
@@ -21,6 +39,12 @@ const terminalSessions = new Map(); // Map to track terminal sessions per peer
 // Function to generate a new key
 function generateNewKey() {
   const newKey = crypto.randomBytes(32);
+  
+  // Ensure .env file exists before appending
+  if (!fs.existsSync('.env')) {
+    fs.writeFileSync('.env', '', 'utf-8');
+  }
+
   fs.appendFileSync('.env', `SERVER_KEY=${newKey.toString('hex')}\n`, { flag: 'a' });
   return newKey;
 }
