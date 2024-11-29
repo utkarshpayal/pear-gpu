@@ -412,41 +412,54 @@ function handleKillTerminal(containerId, peer) {
 function streamContainerStats(containerInfo) {
   const container = docker.getContainer(containerInfo.Id);
 
-  container.stats({ stream: true }, (err, stream) => {
-    if (err) {
-      console.error(`[ERROR] Failed to get stats for container ${containerInfo.Id}: ${err.message}`);
+  // First, retrieve the container's IP address using inspect
+  container.inspect((inspectErr, data) => {
+    if (inspectErr) {
+      console.error(`[ERROR] Failed to inspect container ${containerInfo.Id}: ${inspectErr.message}`);
       return;
     }
 
-    stream.on('data', (data) => {
-      try {
-        const stats = JSON.parse(data.toString());
-        const cpuUsage = calculateCPUPercent(stats);
-        const memoryUsage = stats.memory_stats.usage;
-        const networks = stats.networks;
-        const ipAddress = networks ? Object.values(networks)[0].IPAddress : '-';
+    // Retrieve the IP address from the NetworkSettings
+    const ipAddress = data.NetworkSettings.Networks
+      ? Object.values(data.NetworkSettings.Networks)[0].IPAddress
+      : '-';
 
-        const statsData = {
-          id: containerInfo.Id,
-          cpu: cpuUsage,
-          memory: memoryUsage,
-          ip: ipAddress,
-        };
-
-        // Broadcast stats to all connected peers
-        for (const peer of connectedPeers) {
-          peer.write(JSON.stringify({ type: 'stats', data: statsData }));
-        }
-      } catch (err) {
-        console.error(`[ERROR] Failed to parse stats for container ${containerInfo.Id}: ${err.message}`);
+    // Start streaming container stats
+    container.stats({ stream: true }, (statsErr, stream) => {
+      if (statsErr) {
+        console.error(`[ERROR] Failed to get stats for container ${containerInfo.Id}: ${statsErr.message}`);
+        return;
       }
-    });
 
-    stream.on('error', (err) => {
-      console.error(`[ERROR] Stats stream error for container ${containerInfo.Id}: ${err.message}`);
+      stream.on('data', (data) => {
+        try {
+          const stats = JSON.parse(data.toString());
+          const cpuUsage = calculateCPUPercent(stats);
+          const memoryUsage = stats.memory_stats.usage;
+
+          const statsData = {
+            id: containerInfo.Id,
+            cpu: cpuUsage,
+            memory: memoryUsage,
+            ip: ipAddress, // Use the inspected IP address
+          };
+
+          // Broadcast stats to all connected peers
+          for (const peer of connectedPeers) {
+            peer.write(JSON.stringify({ type: 'stats', data: statsData }));
+          }
+        } catch (parseErr) {
+          console.error(`[ERROR] Failed to parse stats for container ${containerInfo.Id}: ${parseErr.message}`);
+        }
+      });
+
+      stream.on('error', (streamErr) => {
+        console.error(`[ERROR] Stats stream error for container ${containerInfo.Id}: ${streamErr.message}`);
+      });
     });
   });
 }
+
 
 
 // Handle process termination
