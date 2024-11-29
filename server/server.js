@@ -60,13 +60,16 @@ swarm.on('connection', (peer) => {
           console.log('[INFO] Handling \'listContainers\' command');
           const containers = await docker.listContainers({ all: true });
         
-          // Fetch detailed network info for each container
           const detailedContainers = await Promise.all(
             containers.map(async (container) => {
               const details = await docker.getContainer(container.Id).inspect();
+              console.log(details.NetworkSettings.Networks); // Log the network details
+          
+              // Safely access the IP address
               const ipAddress = details.NetworkSettings.Networks
-                ? Object.values(details.NetworkSettings.Networks)[0].IPAddress
-                : '-';
+                ? Object.values(details.NetworkSettings.Networks)[0]?.IPAddress || 'No IP Assigned'
+                : 'No Networks';
+          
               return { ...container, ipAddress }; // Add IP address to container data
             })
           );
