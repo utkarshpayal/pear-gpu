@@ -299,9 +299,11 @@ function renderContainers(containers) {
   containerList.innerHTML = ''; // Clear the current list
 
   containers.forEach((container) => {
-    const name = container.Names[0].replace(/^\//, ''); // Remove leading slash from container names
+    const name = container.Names[0].replace(/^\//, ''); // Remove leading slash
     const image = container.Image;
     const containerId = container.Id;
+    const ipAddress = container.ipAddress || '-'; // Use the IP address field
+
     const row = document.createElement('tr');
     row.dataset.containerId = containerId; // Store container ID for reference
     row.innerHTML = `
@@ -310,36 +312,31 @@ function renderContainers(containers) {
         <td>${container.State}</td>
         <td class="cpu">0</td>
         <td class="memory">0</td>
-        <td class="ip-address">-</td>
+        <td class="ip-address">${ipAddress}</td>
         <td>
-        <button class="btn btn-success btn-sm action-start" ${container.State === 'running' ? 'disabled' : ''}>
-        <i class="fas fa-play"></i>
-        </button>
-        <button class="btn btn-warning btn-sm action-stop" ${container.State !== 'running' ? 'disabled' : ''}>
-        <i class="fas fa-stop"></i>
-        </button>
-        <button class="btn btn-danger btn-sm action-remove">
-        <i class="fas fa-trash"></i>
-        </button>
-        <button class="btn btn-primary btn-sm action-terminal" ${container.State !== 'running' ? 'disabled' : ''}>
-        <i class="fas fa-terminal"></i>
-        </button>
-        <button class="btn btn-secondary btn-sm action-duplicate">
-        <i class="fas fa-clone"></i>
-        </button>
+          <button class="btn btn-success btn-sm action-start" ${container.State === 'running' ? 'disabled' : ''}>
+            <i class="fas fa-play"></i>
+          </button>
+          <button class="btn btn-warning btn-sm action-stop" ${container.State !== 'running' ? 'disabled' : ''}>
+            <i class="fas fa-stop"></i>
+          </button>
+          <button class="btn btn-danger btn-sm action-remove">
+            <i class="fas fa-trash"></i>
+          </button>
+          <button class="btn btn-primary btn-sm action-terminal" ${container.State !== 'running' ? 'disabled' : ''}>
+            <i class="fas fa-terminal"></i>
+          </button>
+          <button class="btn btn-secondary btn-sm action-duplicate">
+            <i class="fas fa-clone"></i>
+          </button>
         </td>
-      `;
+    `;
     containerList.appendChild(row);
 
     // Add event listeners for action buttons
     addActionListeners(row, container);
-
-    // Add event listener for duplicate button
-    const duplicateBtn = row.querySelector('.action-duplicate');
-    duplicateBtn.addEventListener('click', () => openDuplicateModal(container));
   });
 }
-
 
 // Add event listeners to action buttons
 function addActionListeners(row, container) {

@@ -59,7 +59,19 @@ swarm.on('connection', (peer) => {
         case 'listContainers':
           console.log('[INFO] Handling \'listContainers\' command');
           const containers = await docker.listContainers({ all: true });
-          response = { type: 'containers', data: containers };
+        
+          // Fetch detailed network info for each container
+          const detailedContainers = await Promise.all(
+            containers.map(async (container) => {
+              const details = await docker.getContainer(container.Id).inspect();
+              const ipAddress = details.NetworkSettings.Networks
+                ? Object.values(details.NetworkSettings.Networks)[0].IPAddress
+                : '-';
+              return { ...container, ipAddress }; // Add IP address to container data
+            })
+          );
+        
+          response = { type: 'containers', data: detailedContainers };
           break;
 
         case 'inspectContainer':
