@@ -5,42 +5,16 @@ import Docker from 'dockerode';
 import crypto from 'hypercore-crypto';
 import { PassThrough } from 'stream';
 import os from "os";
-import fs from 'fs';
-import dotenv from 'dotenv';
 
-// Load environment variables from .env file
-dotenv.config();
-
-const docker = new Docker({
-  socketPath: os.platform() === "win32" ? '//./pipe/dockerDesktopLinuxEngine' : '/var/run/docker.sock',
-});
+const docker = new Docker({ socketPath: os.platform() === "win32" ? '//./pipe/dockerDesktopLinuxEngine' : '/var/run/docker.sock' });
 const swarm = new Hyperswarm();
 const connectedPeers = new Set();
 const terminalSessions = new Map(); // Map to track terminal sessions per peer
 
-// Function to generate a new key
-function generateNewKey() {
-  const newKey = crypto.randomBytes(32);
-  fs.appendFileSync('.env', `SERVER_KEY=${newKey.toString('hex')}\n`, { flag: 'a' });
-  return newKey;
-}
-
-// Load or generate the topic key
-let keyHex = process.env.SERVER_KEY;
-if (!keyHex) {
-  console.log('[INFO] No SERVER_KEY found in .env. Generating a new one...');
-  const newKey = generateNewKey();
-  keyHex = newKey.toString('hex');
-} else {
-  console.log('[INFO] SERVER_KEY loaded from .env.');
-}
-
-// Convert the keyHex to a Buffer
-const topic = Buffer.from(keyHex, 'hex');
-
+// Generate a topic for the server
+const topic = crypto.randomBytes(32);
 console.log(`[INFO] Server started with topic: ${topic.toString('hex')}`);
 
-// Start listening or further implementation logic here
 // Join the swarm with the generated topic
 swarm.join(topic, { server: true, client: false });
 
