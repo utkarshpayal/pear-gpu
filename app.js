@@ -33,6 +33,33 @@ collapseSidebarBtn.addEventListener('click', () => {
   btn.innerHTML = sidebar.classList.contains('collapsed') ? '&gt;' : '&lt;';
 });
 
+function handlePeerData(data, topicId, peer) {
+  try {
+    const response = JSON.parse(data.toString());
+    console.log(`[DEBUG] Received data from peer (topic: ${topicId}): ${JSON.stringify(response)}`);
+
+    if (response.type === 'containers') {
+      if (window.activePeer === peer) {
+        renderContainers(response.data);
+      }
+    } else if (response.type === 'terminalOutput') {
+      appendTerminalOutput(response.data, response.containerId, response.encoding);
+    } else if (response.type === 'containerConfig') {
+      if (window.inspectContainerCallback) {
+        window.inspectContainerCallback(response.data);
+        window.inspectContainerCallback = null; // Reset the callback
+      }
+    } else if (response.type === 'stats') {
+      updateContainerStats(response.data);
+    } else if (response.error) {
+      console.error(`[ERROR] Server error: ${response.error}`);
+    }
+  } catch (err) {
+    console.error(`[ERROR] Failed to parse data from peer (topic: ${topicId}): ${err.message}`);
+  }
+}
+
+
 // Add a new connection
 addConnectionForm.addEventListener('submit', (e) => {
   e.preventDefault();
@@ -58,10 +85,10 @@ function addConnection(topicHex) {
       <span>
         <span class="connection-status status-disconnected"></span>${topicId}
       </span>
-  <button class="btn btn-sm btn-danger disconnect-btn">
-  <i class="fas fa-plug"></i>
-</button>
-    `;
+      <button class="btn btn-sm btn-danger disconnect-btn">
+        <i class="fas fa-plug"></i>
+      </button>
+  `;
 
   // Add click event to switch connection
   connectionItem.querySelector('span').addEventListener('click', () => switchConnection(topicId));
@@ -96,35 +123,7 @@ function addConnection(topicHex) {
     connections[topicId].peer = peer;
     updateConnectionStatus(topicId, true);
 
-
-    function handlePeerData(data, topicId, peer) {
-      try {
-        const response = JSON.parse(data.toString());
-        console.log(`[DEBUG] Received data from peer (topic: ${topicId}): ${JSON.stringify(response)}`);
-
-        if (response.type === 'containers') {
-          if (window.activePeer === peer) {
-            renderContainers(response.data);
-          }
-        } else if (response.type === 'terminalOutput') {
-          appendTerminalOutput(response.data, response.containerId, response.encoding);
-        } else if (response.type === 'containerConfig') {
-          if (window.inspectContainerCallback) {
-            window.inspectContainerCallback(response.data);
-            window.inspectContainerCallback = null; // Reset the callback
-          }
-        } else if (response.type === 'stats') {
-          updateContainerStats(response.data);
-        } else if (response.error) {
-          console.error(`[ERROR] Server error: ${response.error}`);
-        }
-      } catch (err) {
-        console.error(`[ERROR] Failed to parse data from peer (topic: ${topicId}): ${err.message}`);
-      }
-    }
-
     peer.on('data', (data) => {
-      // Handle incoming data
       handlePeerData(data, topicId, peer);
     });
 
@@ -145,7 +144,17 @@ function addConnection(topicHex) {
       switchConnection(topicId);
     }
   });
+
+  // Collapse the sidebar after adding a new connection
+  const sidebar = document.getElementById('sidebar');
+  const collapseSidebarBtn = document.getElementById('collapse-sidebar-btn');
+  if (!sidebar.classList.contains('collapsed')) {
+    sidebar.classList.add('collapsed');
+    collapseSidebarBtn.innerHTML = '&gt;';
+    console.log('[INFO] Sidebar collapsed after adding new connection.');
+  }
 }
+
 
 function disconnectConnection(topicId, connectionItem) {
   const connection = connections[topicId];
