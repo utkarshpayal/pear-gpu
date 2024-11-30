@@ -48,33 +48,87 @@ function waitForPeerResponse(expectedMessageFragment, timeout = 900000) {
   });
 }
 
+// Utility functions for managing cookies
+function setCookie(name, value, days = 365) {
+  const date = new Date();
+  date.setTime(date.getTime() + days * 24 * 60 * 60 * 1000);
+  const expires = `expires=${date.toUTCString()}`;
+  document.cookie = `${name}=${encodeURIComponent(value)};${expires};path=/`;
+}
+
+function getCookie(name) {
+  const cookies = document.cookie.split('; ');
+  for (let i = 0; i < cookies.length; i++) {
+    const [key, value] = cookies[i].split('=');
+    if (key === name) return decodeURIComponent(value);
+  }
+  return null;
+}
+
+function deleteCookie(name) {
+  document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
+}
+
+// Load connections from cookies
+function loadConnections() {
+  const savedConnections = getCookie('connections');
+  return savedConnections ? JSON.parse(savedConnections) : {};
+}
+
+// Save connections to cookies
+function saveConnections() {
+  setCookie('connections', JSON.stringify(connections));
+}
+
+// Add Reset Connections Button
+// Toggle Reset Connections Button Visibility
+function toggleResetButtonVisibility() {
+  const resetConnectionsBtn = document.querySelector('#sidebar .btn-danger');
+  if (!resetConnectionsBtn) return;
+
+  // Show or hide the button based on active connections
+  resetConnectionsBtn.style.display = Object.keys(connections).length > 0 ? 'block' : 'none';
+}
+
+// Add Reset Connections Button
+const resetConnectionsBtn = document.createElement('button');
+resetConnectionsBtn.textContent = 'Reset Connections';
+resetConnectionsBtn.className = 'btn btn-danger w-100 mt-2';
+resetConnectionsBtn.addEventListener('click', () => {
+  console.log('[INFO] Resetting connections and clearing cookies.');
+  Object.keys(connections).forEach((topicId) => {
+    disconnectConnection(topicId);
+  });
+  deleteCookie('connections');
+  resetConnectionsView();
+  showWelcomePage();
+  toggleResetButtonVisibility(); // Ensure button visibility is updated
+});
+document.getElementById('sidebar').appendChild(resetConnectionsBtn);
+
 
 
 // Initialize the app
 console.log('[INFO] Client app initialized');
+// Load connections from cookies and restore them
 document.addEventListener('DOMContentLoaded', () => {
-  console.log('[INFO] Initializing Client App');
+  const savedConnections = loadConnections();
+  console.log('[INFO] Restoring saved connections:', savedConnections);
 
-  const connectionTitle = document.getElementById('connection-title');
-  if (!connectionTitle) {
-    console.error('[ERROR] Connection title element is missing! Creating dynamically...');
-    const content = document.getElementById('content');
-    const titleElement = document.createElement('h1');
-    titleElement.id = 'connection-title';
-    titleElement.textContent = '󠀠';
-    titleElement.classList.add('hidden'); // Initially hidden
-    content.insertBefore(titleElement, content.firstChild);
-  }
+  // Restore saved connections
+  Object.keys(savedConnections).forEach((topicId) => {
+    const topicHex = savedConnections[topicId].topicHex;
+    addConnection(topicHex); // Add connections using the saved topicHex
+  });
 
-  if (Object.keys(connections).length === 0) {
-    showWelcomePage();
-  } else {
+  if (Object.keys(connections).length > 0) {
     hideWelcomePage();
+  } else {
+    showWelcomePage();
   }
 
-  assertVisibility(); // Ensure visibility is correct after initialization
+  assertVisibility(); // Ensure visibility reflects the restored connections
 });
-
 
 // Show Status Indicator
 // Modify showStatusIndicator to recreate it dynamically
@@ -137,6 +191,10 @@ collapseSidebarBtn.addEventListener('click', () => {
   sidebar.classList.toggle('collapsed');
   const btn = collapseSidebarBtn;
   btn.innerHTML = sidebar.classList.contains('collapsed') ? '&gt;' : '&lt;';
+
+  // Toggle Reset Connections Button Visibility
+  const resetConnectionsBtn = document.querySelector('#sidebar .btn-danger');
+  resetConnectionsBtn.style.display = sidebar.classList.contains('collapsed') ? 'none' : 'block';
 });
 
 function handlePeerData(data, topicId, peer) {
@@ -188,20 +246,18 @@ addConnectionForm.addEventListener('submit', (e) => {
   }
 });
 
-// Function to add a new connection
 function addConnection(topicHex) {
   console.log(`[DEBUG] Adding connection with topic: ${topicHex}`);
 
   if (Object.keys(connections).length === 0) {
-    console.log('[DEBUG] Hiding welcome page after first connection');
-    hideWelcomePage(); // Hide the welcome page when the first connection is added
+    hideWelcomePage();
   }
 
   const topic = b4a.from(topicHex, 'hex');
   const topicId = topicHex.substring(0, 12);
 
-  console.log(`[INFO] Adding connection with topic: ${topicHex}`);
-  assertVisibility(); // Ensure visibility reflects the added connection
+  connections[topicId] = { topic, peer: null, swarm: null, topicHex };
+  saveConnections(); // Save updated connections to cookies
 
   const connectionItem = document.createElement('li');
   connectionItem.className = 'list-group-item d-flex align-items-center justify-content-between';
@@ -215,23 +271,14 @@ function addConnection(topicHex) {
       </button>
   `;
 
-  // Add click event to switch connection
   connectionItem.querySelector('span').addEventListener('click', () => switchConnection(topicId));
-
-  // Add click event to the disconnect button
-  const disconnectBtn = connectionItem.querySelector('.disconnect-btn');
-  disconnectBtn.addEventListener('click', (e) => {
-    e.stopPropagation(); // Prevent triggering the switch connection event
+  connectionItem.querySelector('.disconnect-btn').addEventListener('click', (e) => {
+    e.stopPropagation();
     disconnectConnection(topicId, connectionItem);
   });
 
   connectionList.appendChild(connectionItem);
 
-  connections[topicId] = { topic, peer: null, swarm: null };
-
-  console.log('[DEBUG] Updated connections object:', connections);
-
-  // Create a new swarm for this connection
   const swarm = new Hyperswarm();
   connections[topicId].swarm = swarm;
 
@@ -239,27 +286,18 @@ function addConnection(topicHex) {
 
   swarm.on('connection', (peer) => {
     console.log(`[INFO] Connected to peer for topic: ${topicHex}`);
-
     if (connections[topicId].peer) {
-      console.warn(`[WARN] Duplicate connection detected for topic: ${topicId}. Closing.`);
       peer.destroy();
       return;
     }
-
     connections[topicId].peer = peer;
     updateConnectionStatus(topicId, true);
 
-    peer.on('data', (data) => {
-      handlePeerData(data, topicId, peer);
-    });
-
+    peer.on('data', (data) => handlePeerData(data, topicId, peer));
     peer.on('close', () => {
-      console.log(`[INFO] Disconnected from peer for topic: ${topicHex}`);
       updateConnectionStatus(topicId, false);
-
       if (window.activePeer === peer) {
         window.activePeer = null;
-        // connectionTitle.textContent = 'Disconnected';
         dashboard.classList.add('hidden');
         containerList.innerHTML = '';
       }
@@ -270,16 +308,27 @@ function addConnection(topicHex) {
     }
   });
 
-  // Automatically collapse the sidebar when a new connection is added
+  // Collapse the sidebar after adding a connection
   const sidebar = document.getElementById('sidebar');
   const collapseSidebarBtn = document.getElementById('collapse-sidebar-btn');
   if (!sidebar.classList.contains('collapsed')) {
     sidebar.classList.add('collapsed');
     collapseSidebarBtn.innerHTML = '&gt;';
-    console.log('[DEBUG] Sidebar auto-collapsed after adding a new connection');
+    console.log('[DEBUG] Sidebar collapsed after adding connection');
   }
 }
 
+
+// Initialize connections from cookies on page load
+document.addEventListener('DOMContentLoaded', () => {
+  const savedConnections = loadConnections();
+  console.log('[INFO] Loading saved connections:', savedConnections);
+
+  Object.keys(savedConnections).forEach((topicId) => {
+    const topicHex = savedConnections[topicId].topic;
+    addConnection(topicHex);
+  });
+});
 
 
 function disconnectConnection(topicId, connectionItem) {

@@ -22,9 +22,10 @@
       color: white;
       overflow: hidden;
     }
+
     .hidden {
-    display: none !important;
-}
+      display: none !important;
+    }
 
     #titlebar {
       -webkit-app-region: drag;
@@ -78,14 +79,18 @@
     }
 
     #content {
-  display: flex;
-  flex-direction: column; /* Keep vertical stacking for child elements */
-  margin-left: 250px; /* Leave space for the sidebar */
-  flex: 1; /* Allow the content to grow */
-  padding: 30px;
-  overflow-y: auto; /* Allow scrolling if content overflows */
-  position: relative;
-}
+      display: flex;
+      flex-direction: column;
+      /* Keep vertical stacking for child elements */
+      margin-left: 250px;
+      /* Leave space for the sidebar */
+      flex: 1;
+      /* Allow the content to grow */
+      padding: 30px;
+      overflow-y: auto;
+      /* Allow scrolling if content overflows */
+      position: relative;
+    }
 
     #sidebar.collapsed~#content {
       margin-left: 50px;
@@ -171,17 +176,18 @@
     }
 
     #status-indicator {
-  display: none; /* Ensure it's hidden by default */
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  align-items: center;
-  justify-content: center;
-  background-color: rgba(0, 0, 0, 0.75);
-  z-index: 1050;
-}
+      display: none;
+      /* Ensure it's hidden by default */
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      align-items: center;
+      justify-content: center;
+      background-color: rgba(0, 0, 0, 0.75);
+      z-index: 1050;
+    }
 
     #status-indicator .spinner-border {
       width: 3rem;
@@ -195,37 +201,126 @@
     }
 
     #welcome-page {
+      display: flex;
+      flex-direction: column;
+      /* Stack child elements vertically */
+      justify-content: center;
+      /* Center content vertically */
+      align-items: center;
+      /* Center content horizontally */
+      text-align: center;
+      /* Center-align text */
+      position: absolute;
+      /* Overlay it over the content area */
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      /* Center it perfectly in the content */
+      max-width: 800px;
+      /* Restrict the width of the welcome page */
+      width: 100%;
+      /* Allow it to scale */
+      padding: 20px;
+      background-color: transparent;
+      /* Match the theme */
+    }
+
+    #welcome-page.hidden {
+      display: none !important;
+      /* Completely hide when not needed */
+    }
+
+    #dashboard {
+      display: flex;
+      /* Use flex layout for content within the dashboard */
+      flex-direction: column;
+      /* Stack elements vertically */
+      flex: 1;
+      /* Ensure it uses all available space */
+      width: 100%;
+      /* Take up the full width of the content area */
+      padding: 0;
+      /* Remove extra padding */
+      overflow-y: auto;
+      /* Allow vertical scrolling if needed */
+      position: relative;
+      /* Prevent overlap with other elements */
+    }
+
+    #dashboard.hidden {
+      display: none !important;
+      /* Hide the dashboard completely when not needed */
+    }
+    #alert-container {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 1055; /* Ensure it overlays important elements only */
   display: flex;
-  flex-direction: column; /* Stack child elements vertically */
-  justify-content: center; /* Center content vertically */
-  align-items: center; /* Center content horizontally */
-  text-align: center; /* Center-align text */
-  position: absolute; /* Overlay it over the content area */
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%); /* Center it perfectly in the content */
-  max-width: 800px; /* Restrict the width of the welcome page */
-  width: 100%; /* Allow it to scale */
-  padding: 20px;
-  background-color: transparent; /* Match the theme */
+  flex-direction: column-reverse; /* Stack alerts upwards */
+  gap: 10px; /* Add space between alerts */
+  pointer-events: none; /* Prevent container from blocking clicks */
 }
 
-#welcome-page.hidden {
-  display: none !important; /* Completely hide when not needed */
+.alert {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  max-width: 80%;
+  padding: 12px 20px;
+  background-color: #2b2b2b;
+  color: #e0e0e0;
+  border-radius: 6px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+  font-family: Arial, sans-serif;
+  font-size: 14px;
+  animation: fadeIn 0.3s ease-out, fadeOut 4.5s ease-in forwards;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: auto; /* Allow alerts to be interactive */
 }
 
-#dashboard {
-  display: flex; /* Use flex layout for content within the dashboard */
-  flex-direction: column; /* Stack elements vertically */
-  flex: 1; /* Ensure it uses all available space */
-  width: 100%; /* Take up the full width of the content area */
-  padding: 0; /* Remove extra padding */
-  overflow-y: auto; /* Allow vertical scrolling if needed */
-  position: relative; /* Prevent overlap with other elements */
+.alert.success {
+  border-left: 6px solid #28a745; /* Green border for success */
 }
 
-#dashboard.hidden {
-  display: none !important; /* Hide the dashboard completely when not needed */
+.alert.danger {
+  border-left: 6px solid #dc3545; /* Red border for danger */
+}
+
+.alert .close-btn {
+  background: none;
+  border: none;
+  color: #e0e0e0;
+  font-size: 16px;
+  cursor: pointer;
+  margin-left: auto; /* Align to the far right */
+}
+
+@media (max-width: 768px) {
+  #alert-container {
+    bottom: 10px;
+    right: 10px;
+  }
+
+  .alert {
+    max-width: 90%;
+    font-size: 12px;
+    padding: 10px 15px;
+    white-space: normal; /* Allow wrapping on small screens */
+    text-overflow: clip; /* Disable ellipsis when wrapping */
+  }
+}
+
+@media (min-width: 768px) {
+  .alert {
+    white-space: nowrap; /* Re-enable nowrap for larger screens */
+    text-overflow: ellipsis; /* Add ellipsis for overflowed text */
+  }
+}
+#sidebar.collapsed .btn-danger {
+  display: none;
 }
   </style>
 
