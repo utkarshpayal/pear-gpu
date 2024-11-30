@@ -381,12 +381,13 @@ function addConnection(topicHex) {
         window.activePeer = null;
         dashboard.classList.add('hidden');
         containerList.innerHTML = '';
+        stopStatsInterval(); // Stop stats polling
       }
     });
-
     if (!window.activePeer) {
       switchConnection(topicId);
     }
+    startStatsInterval();
   });
 
   // Collapse the sidebar after adding a connection
@@ -409,6 +410,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const topicHex = savedConnections[topicId].topic;
     addConnection(topicHex);
   });
+
+  if (Object.keys(connections).length > 0) {
+    hideWelcomePage();
+    startStatsInterval(); // Start stats polling for active peers
+  } else {
+    showWelcomePage();
+  }
+
+  assertVisibility();
 });
 
 
@@ -789,22 +799,20 @@ function updateStatsUI(row, stats) {
 }
 
 function updateContainerStats(stats) {
-  // console.log(`[DEBUG] Updating stats for container ID: ${stats.id}, Topic ID: ${stats.topicId}`);
-
   if (!window.activePeer || !connections[stats.topicId] || window.activePeer !== connections[stats.topicId].peer) {
-    // console.warn(`[WARN] Stats received for inactive or unknown connection. Skipping.`);
     return;
   }
 
   const row = containerList.querySelector(`tr[data-container-id="${stats.id}"]`);
   if (!row) {
-    // console.warn(`[WARN] No matching row for container ID: ${stats.id}. Skipping stats update.`);
     return;
   }
 
-  // Use updateStatsUI for cleaner and optimized DOM updates
-  updateStatsUI(row, stats);
+  // Smooth incoming stats
+  const smoothed = smoothStats(stats);
+  updateStatsUI(row, smoothed);
 }
+
 
 
 
