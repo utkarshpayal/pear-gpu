@@ -52,8 +52,10 @@ swarm.on('connection', (peer) => {
   peer.on('data', async (data) => {
     try {
       const parsedData = JSON.parse(data.toString());
-      console.log(`[DEBUG] Received data from peer: ${JSON.stringify(parsedData)}`);
-      let response;
+      if (!(parsedData.command === 'stats' && Object.keys(parsedData.args).length === 0)) {
+        console.log(`[DEBUG] Received data from peer: ${JSON.stringify(parsedData)}`);
+      }
+            let response;
 
       switch (parsedData.command) {
         case 'listContainers':
