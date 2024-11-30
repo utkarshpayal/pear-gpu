@@ -21,7 +21,38 @@ window.openTerminals = {};
 let activePeer = null;
 window.activePeer = null; // Expose to other modules
 hideStatusIndicator();
+let statsInterval = null; // Global variable to hold the interval
 
+function stopStatsInterval() {
+  if (statsInterval) {
+    clearInterval(statsInterval);
+    statsInterval = null;
+    console.log('[INFO] Stats interval stopped.');
+  }
+}
+
+function startStatsInterval() {
+  // Clear any existing interval
+  if (statsInterval) {
+    clearInterval(statsInterval);
+  }
+
+  // Start a new interval to request stats every second
+  statsInterval = setInterval(() => {
+    if (window.activePeer) {
+      console.log('[INFO] Requesting container stats...');
+      sendCommand('stats', {}); // Adjust the command if specific arguments are needed
+    } else {
+      console.warn('[WARN] No active peer; skipping stats request.');
+    }
+  }, 1000); // 1 second interval
+}
+
+function refreshContainerStats() {
+  console.log('[INFO] Refreshing container stats...');
+  sendCommand('listContainers'); // Request an updated container list
+  startStatsInterval(); // Restart stats interval
+}
 
 function waitForPeerResponse(expectedMessageFragment, timeout = 900000) {
   console.log(`[DEBUG] Waiting for peer response with fragment: "${expectedMessageFragment}"`);
@@ -486,6 +517,7 @@ function switchConnection(topicId) {
   if (!connection || !connection.peer) {
     console.error('[ERROR] No connection found or no active peer.');
     showWelcomePage();
+    stopStatsInterval(); // Stop stats interval if no active peer
     return;
   }
 
@@ -496,8 +528,13 @@ function switchConnection(topicId) {
   resetContainerList();
 
   console.log(`[INFO] Switched to connection: ${topicId}`);
+  
+  // Start the stats interval
+  startStatsInterval();
+
   sendCommand('listContainers'); // Request containers for the new connection
 }
+
 
 // Attach switchConnection to the global window object
 window.switchConnection = switchConnection;
@@ -584,17 +621,20 @@ function addActionListeners(row, container) {
   startBtn.addEventListener('click', async () => {
     showStatusIndicator(`Starting container "${container.Names[0]}"...`);
     sendCommand('startContainer', { id: container.Id });
-
+  
     const expectedMessageFragment = `Container ${container.Id} started`;
-
+  
     try {
       const response = await waitForPeerResponse(expectedMessageFragment);
       console.log('[DEBUG] Start container response:', response);
-
+  
       showAlert('success', response.message);
-
+  
       // Refresh the container list to update states
       sendCommand('listContainers');
+  
+      // Restart stats interval
+      startStatsInterval();
     } catch (error) {
       console.error('[ERROR] Failed to start container:', error.message);
       showAlert('danger', error.message || 'Failed to start container.');
@@ -603,21 +643,25 @@ function addActionListeners(row, container) {
       hideStatusIndicator();
     }
   });
+  
 
   stopBtn.addEventListener('click', async () => {
     showStatusIndicator(`Stopping container "${container.Names[0]}"...`);
     sendCommand('stopContainer', { id: container.Id });
-
+  
     const expectedMessageFragment = `Container ${container.Id} stopped`;
-
+  
     try {
       const response = await waitForPeerResponse(expectedMessageFragment);
       console.log('[DEBUG] Stop container response:', response);
-
+  
       showAlert('success', response.message);
-
+  
       // Refresh the container list to update states
       sendCommand('listContainers');
+  
+      // Restart stats interval
+      startStatsInterval();
     } catch (error) {
       console.error('[ERROR] Failed to stop container:', error.message);
       showAlert('danger', error.message || 'Failed to stop container.');
@@ -626,6 +670,7 @@ function addActionListeners(row, container) {
       hideStatusIndicator();
     }
   });
+  
 
 
   // Restart Button
