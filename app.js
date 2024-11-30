@@ -103,39 +103,50 @@ function waitForPeerResponse(expectedMessageFragment, timeout = 900000) {
   });
 }
 
-// Utility functions for managing cookies
-function setCookie(name, value, days = 365) {
-  const date = new Date();
-  date.setTime(date.getTime() + days * 24 * 60 * 60 * 1000);
-  const expires = `expires=${date.toUTCString()}`;
-  document.cookie = `${name}=${encodeURIComponent(value)};${expires};path=/`;
-}
+function saveConnections() {
+  console.log('[DEBUG] Saving connections:', connections);
 
-function getCookie(name) {
-  const cookies = document.cookie.split('; ');
-  for (let i = 0; i < cookies.length; i++) {
-    const [key, value] = cookies[i].split('=');
-    if (key === name) return decodeURIComponent(value);
-  }
-  return null;
-}
+  const serializableConnections = {};
 
-function deleteCookie(name) {
-  document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
-}
-
-// Load connections from cookies
-function loadConnections() {
-  const savedConnections = getCookie('connections');
-  const connections = savedConnections ? JSON.parse(savedConnections) : {};
-
-  // Recreate the topic Buffer from the hex string
   for (const topicId in connections) {
-    const { topicHex } = connections[topicId];
+    const { topic, topicHex, connectionName } = connections[topicId];
+    if (!serializableConnections[topicId] && topicHex) {
+      serializableConnections[topicId] = {
+        topicHex,
+        connectionName: connectionName || 'Unnamed Connection',
+        topic: b4a.toString(topic, 'hex'),
+      };
+    } else {
+      console.warn(`[WARN] Skipping duplicate or invalid connection: ${topicId}`);
+    }
+  }
+
+  localStorage.setItem('connections', JSON.stringify(serializableConnections));
+}
+
+function loadConnections() {
+  // Clear any previously loaded connections in memory
+  Object.keys(connections).forEach((topicId) => {
+    delete connections[topicId];
+  });
+
+  const savedConnections = localStorage.getItem('connections');
+  const connectionsData = savedConnections ? JSON.parse(savedConnections) : {};
+
+  for (const topicId in connectionsData) {
+    const { topicHex, connectionName } = connectionsData[topicId];
+
+    if (!topicHex) {
+      console.warn(`[WARN] Skipping connection with missing topicHex: ${topicId}`);
+      continue;
+    }
+
+    console.log(`[DEBUG] Loading connection: ${topicHex}, Name: ${connectionName}`);
     connections[topicId] = {
       topic: b4a.from(topicHex, 'hex'),
       topicHex,
-      peer: null, // Initialize additional properties
+      connectionName: connectionName || 'Unnamed Connection',
+      peer: null,
       swarm: null,
     };
   }
@@ -144,19 +155,44 @@ function loadConnections() {
 }
 
 
-// Save connections to cookies
-function saveConnections() {
-  const serializableConnections = {};
+function renderConnections() {
+  console.log('[DEBUG] Rendering connections in the UI...');
+  connectionList.innerHTML = ''; // Clear the current list
 
-  for (const topicId in connections) {
-    const { topic, topicHex } = connections[topicId]; // Only serialize simple properties
-    serializableConnections[topicId] = {
-      topicHex,
-      topic: b4a.toString(topic, 'hex'), // Convert Buffer to hex string
-    };
-  }
+  Object.keys(connections).forEach((topicId) => {
+    const { topicHex, connectionName } = connections[topicId];
 
-  setCookie('connections', JSON.stringify(serializableConnections));
+    // Render the connection
+    const connectionItem = document.createElement('li');
+    connectionItem.className = 'list-group-item d-flex align-items-center justify-content-between';
+    connectionItem.dataset.topicId = topicId;
+    connectionItem.innerHTML = `
+      <span>
+        <span class="connection-status status-disconnected"></span>${connectionName || 'Unnamed Connection'} (${topicId})
+      </span>
+      <button class="btn btn-sm btn-danger disconnect-btn">
+        <i class="fas fa-plug"></i>
+      </button>
+    `;
+    connectionItem.querySelector('span').addEventListener('click', () => switchConnection(topicId));
+    connectionItem.querySelector('.disconnect-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      disconnectConnection(topicId, connectionItem);
+    });
+    connectionList.appendChild(connectionItem);
+  });
+
+  console.log('[DEBUG] Connections rendered successfully.');
+}
+
+
+
+
+
+
+
+function deleteConnections() {
+  localStorage.removeItem('connections');
 }
 
 
@@ -175,46 +211,18 @@ const resetConnectionsBtn = document.createElement('button');
 resetConnectionsBtn.textContent = 'Reset Connections';
 resetConnectionsBtn.className = 'btn btn-danger w-100 mt-2';
 resetConnectionsBtn.addEventListener('click', () => {
-  console.log('[INFO] Resetting connections and clearing cookies.');
+  console.log('[INFO] Resetting connections and clearing local storage.');
   Object.keys(connections).forEach((topicId) => {
     disconnectConnection(topicId);
   });
-  deleteCookie('connections');
+  deleteConnections();
   resetConnectionsView();
   showWelcomePage();
-  toggleResetButtonVisibility(); // Ensure button visibility is updated
+  toggleResetButtonVisibility();
 });
 document.getElementById('sidebar').appendChild(resetConnectionsBtn);
 
 
-
-// Initialize the app
-console.log('[INFO] Client app initialized');
-// Load connections from cookies and restore them
-document.addEventListener('DOMContentLoaded', () => {
-  const savedConnections = loadConnections();
-  console.log('[INFO] Restoring saved connections:', savedConnections);
-
-  // Restore saved connections
-  Object.keys(savedConnections).forEach((topicId) => {
-    let topicHex = savedConnections[topicId].topic;
-
-    // Ensure topicHex is a string
-    if (typeof topicHex !== 'string') {
-      topicHex = b4a.toString(topicHex, 'hex');
-    }
-
-    addConnection(topicHex);
-  });
-
-  if (Object.keys(connections).length > 0) {
-    hideWelcomePage();
-  } else {
-    showWelcomePage();
-  }
-
-  assertVisibility(); // Ensure visibility reflects the restored connections
-});
 
 // Show Status Indicator
 // Modify showStatusIndicator to recreate it dynamically
@@ -358,47 +366,88 @@ addConnectionForm.addEventListener('submit', (e) => {
 
   const topicHex = newConnectionTopic.value.trim();
   if (topicHex) {
-    addConnection(topicHex);
+    openConnectionNameModal(topicHex); // Open the modal to ask for the connection name
     newConnectionTopic.value = '';
   }
 });
 
-function addConnection(topicHex) {
-  console.log(`[DEBUG] Adding connection with topic: ${topicHex}`);
 
-  if (Object.keys(connections).length === 0) {
-    hideWelcomePage();
-  }
+function openConnectionNameModal(topicHex) {
+  const connectionNameModalElement = document.getElementById('connectionNameModal');
+  const connectionNameModal = new bootstrap.Modal(connectionNameModalElement);
+  const connectionNameInput = document.getElementById('connection-name-input');
+  const saveConnectionNameBtn = document.getElementById('save-connection-name-btn');
 
-  const topic = b4a.from(topicHex, 'hex');
+  // Clear the input and show the modal
+  connectionNameInput.value = '';
+  connectionNameModal.show();
+
+  // Add event listener for the save button
+  saveConnectionNameBtn.onclick = () => {
+    const connectionName = connectionNameInput.value.trim();
+    if (!connectionName) {
+      showAlert('danger', 'Please enter a connection name.');
+      return;
+    }
+
+    // Hide the modal and add the connection
+    connectionNameModal.hide();
+    addConnection(topicHex, connectionName);
+  };
+}
+
+function addConnection(topicHex, connectionName) {
   const topicId = topicHex.substring(0, 12);
 
-  connections[topicId] = { topic, peer: null, swarm: null, topicHex };
-  saveConnections(); // Save updated connections to cookies
+  // Check if the connection exists
+  if (connections[topicId]) {
+    console.warn(`[WARN] Connection with topic ${topicHex} already exists.`);
+    if (!connections[topicId].swarm || !connections[topicId].peer) {
+      console.log(`[INFO] Reinitializing connection: ${topicHex}`);
+      connections[topicId].swarm = new Hyperswarm();
+      const topic = b4a.from(topicHex, 'hex');
+      connections[topicId].topic = topic;
 
-  const connectionItem = document.createElement('li');
-  connectionItem.className = 'list-group-item d-flex align-items-center justify-content-between';
-  connectionItem.dataset.topicId = topicId;
-  connectionItem.innerHTML = `
-      <span>
-        <span class="connection-status status-disconnected"></span>${topicId}
-      </span>
-      <button class="btn btn-sm btn-danger disconnect-btn">
-        <i class="fas fa-plug"></i>
-      </button>
-  `;
+      const swarm = connections[topicId].swarm;
+      swarm.join(topic, { client: true, server: false });
 
-  connectionItem.querySelector('span').addEventListener('click', () => switchConnection(topicId));
-  connectionItem.querySelector('.disconnect-btn').addEventListener('click', (e) => {
-    e.stopPropagation();
-    disconnectConnection(topicId, connectionItem);
-  });
-  refreshContainerStats();
+      swarm.on('connection', (peer) => {
+        console.log(`[INFO] Connected to peer for topic: ${topicHex}`);
+        if (connections[topicId].peer) {
+          peer.destroy();
+          return;
+        }
+        connections[topicId].peer = peer;
+        updateConnectionStatus(topicId, true);
 
-  connectionList.appendChild(connectionItem);
+        peer.on('data', (data) => handlePeerData(data, topicId, peer));
+        peer.on('close', () => {
+          console.log(`[INFO] Peer disconnected for topic: ${topicId}`);
+          updateConnectionStatus(topicId, false);
 
+          if (window.activePeer === peer) {
+            window.activePeer = null;
+            dashboard.classList.add('hidden');
+            containerList.innerHTML = '';
+            stopStatsInterval();
+          }
+        });
+        if (!window.activePeer) {
+          window.activePeer = connections[topicId].peer;
+        } else {
+          console.warn(`[WARN] Switching active peer. Current: ${window.activePeer}, New: ${connections[topicId].peer}`);
+        }
+      });
+    }
+    renderConnections(); // Ensure the sidebar list is updated
+    return;
+  }
+
+  console.log(`[DEBUG] Adding connection with topic: ${topicHex} and name: ${connectionName}`);
+
+  const topic = b4a.from(topicHex, 'hex');
   const swarm = new Hyperswarm();
-  connections[topicId].swarm = swarm;
+  connections[topicId] = { topic, topicHex, connectionName, peer: null, swarm };
 
   swarm.join(topic, { client: true, server: false });
 
@@ -418,45 +467,53 @@ function addConnection(topicHex) {
         window.activePeer = null;
         dashboard.classList.add('hidden');
         containerList.innerHTML = '';
-        stopStatsInterval(); // Stop stats polling
+        stopStatsInterval();
       }
     });
+
     if (!window.activePeer) {
       switchConnection(topicId);
     }
-    startStatsInterval();
   });
 
-  // Collapse the sidebar after adding a connection
-  const sidebar = document.getElementById('sidebar');
-  const collapseSidebarBtn = document.getElementById('collapse-sidebar-btn');
-  if (!sidebar.classList.contains('collapsed')) {
-    sidebar.classList.add('collapsed');
-    collapseSidebarBtn.innerHTML = '&gt;';
-    console.log('[DEBUG] Sidebar collapsed after adding connection');
-  }
+  saveConnections();
+  renderConnections(); // Ensure the sidebar list is updated
 }
 
 
-// Initialize connections from cookies on page load
+
+
+
+// Initialize the app
+console.log('[INFO] Client app initialized');
+// Load connections from cookies and restore them
+// Initialize the app
+console.log('[INFO] Client app initialized');
+// Load connections from cookies and restore them
 document.addEventListener('DOMContentLoaded', () => {
+  console.log('[INFO] Initializing the app...');
+
   const savedConnections = loadConnections();
-  console.log('[INFO] Loading saved connections:', savedConnections);
+  console.log('[INFO] Restoring saved connections:', savedConnections);
 
   Object.keys(savedConnections).forEach((topicId) => {
-    const topicHex = savedConnections[topicId].topic;
-    addConnection(topicHex);
+    const { topicHex, connectionName } = savedConnections[topicId];
+    addConnection(topicHex, connectionName); // Initialize each connection
   });
 
   if (Object.keys(connections).length > 0) {
     hideWelcomePage();
-    startStatsInterval(); // Start stats polling for active peers
+    const firstConnection = Object.keys(connections)[0];
+    switchConnection(firstConnection); // Auto-switch to the first connection
   } else {
     showWelcomePage();
   }
 
-  assertVisibility();
+  console.log('[INFO] App initialized successfully.');
 });
+
+
+
 
 
 function disconnectConnection(topicId, connectionItem) {
@@ -466,20 +523,6 @@ function disconnectConnection(topicId, connectionItem) {
     return;
   }
 
-  // Clean up terminals
-  if (window.openTerminals[topicId]) {
-    console.log(`[INFO] Closing terminals for topic: ${topicId}`);
-    window.openTerminals[topicId].forEach((terminalId) => {
-      try {
-        cleanUpTerminal(terminalId);
-      } catch (err) {
-        console.error(`[ERROR] Failed to clean up terminal ${terminalId}: ${err.message}`);
-      }
-    });
-    delete window.openTerminals[topicId];
-  }
-
-  // Destroy the peer and swarm
   if (connection.peer) {
     connection.peer.destroy();
   }
@@ -487,35 +530,28 @@ function disconnectConnection(topicId, connectionItem) {
     connection.swarm.destroy();
   }
 
-  // Remove from global connections
   delete connections[topicId];
-
-  // Save the updated connections to cookies
   saveConnections();
 
-  // Remove the connection item from the UI
   if (connectionItem) {
     connectionList.removeChild(connectionItem);
   }
 
-  // Reset the connection title if this was the active peer
   if (window.activePeer === connection.peer) {
     window.activePeer = null;
-
     const connectionTitle = document.getElementById('connection-title');
     if (connectionTitle) {
-      connectionTitle.textContent = 'Choose a Connection'; // Reset the title
+      connectionTitle.textContent = 'Choose a Connection';
     }
-
     const dashboard = document.getElementById('dashboard');
     if (dashboard) {
       dashboard.classList.add('hidden');
     }
-
-    resetContainerList(); // Clear containers
+    resetContainerList();
   }
 
-  // Show welcome page if no connections remain
+  renderConnections(); // Ensure the sidebar list is updated
+
   if (Object.keys(connections).length === 0) {
     showWelcomePage();
   }
@@ -565,36 +601,54 @@ function resetConnectionsView() {
 
 // Update connection status
 function updateConnectionStatus(topicId, isConnected) {
+  if (!connections[topicId]) {
+    console.error(`[ERROR] No connection found for topic: ${topicId}`);
+    return;
+  }
+
   const connectionItem = document.querySelector(`[data-topic-id="${topicId}"] .connection-status`);
   if (connectionItem) {
     connectionItem.className = `connection-status ${isConnected ? 'status-connected' : 'status-disconnected'}`;
   }
+
+  console.log(`[DEBUG] Connection ${topicId} status updated to: ${isConnected ? 'connected' : 'disconnected'}`);
 }
+
+
+setInterval(() => {
+  Object.keys(connections).forEach((topicId) => {
+    const connection = connections[topicId];
+    if (connection.peer && !connection.peer.destroyed) {
+      updateConnectionStatus(topicId, true);
+    } else {
+      updateConnectionStatus(topicId, false);
+    }
+  });
+}, 1000); // Adjust interval as needed
 
 // Switch between connections
 function switchConnection(topicId) {
   const connection = connections[topicId];
 
   if (!connection || !connection.peer) {
-    console.error('[ERROR] No connection found or no active peer.');
-    showWelcomePage();
-    stopStatsInterval(); // Stop stats interval if no active peer
-    return;
+    console.warn(`[WARN] No active peer for connection: ${topicId}`);
+    return; // Skip switching if no active peer is found
   }
 
-  // Update the active peer
+  console.log(`[INFO] Switching to connection: ${topicId}`);
   window.activePeer = connection.peer;
 
-  // Clear container list before loading new data
   resetContainerList();
+  const connectionTitle = document.getElementById('connection-title');
+  if (connectionTitle) {
+    connectionTitle.textContent = connection.connectionName || 'Unnamed Connection';
+  }
 
-  console.log(`[INFO] Switched to connection: ${topicId}`);
-  
-  // Start the stats interval
+  hideWelcomePage();
   startStatsInterval();
-
-  sendCommand('listContainers'); // Request containers for the new connection
+  sendCommand('listContainers');
 }
+
 
 
 // Attach switchConnection to the global window object

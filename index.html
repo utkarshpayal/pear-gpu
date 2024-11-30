@@ -449,6 +449,29 @@
     </div>
   </div>
 
+  <!-- Connection Name Modal -->
+<div class="modal fade" id="connectionNameModal" tabindex="-1" aria-labelledby="connectionNameModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content bg-dark text-white">
+      <div class="modal-header">
+        <h5 class="modal-title" id="connectionNameModalLabel">Enter Connection Name</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label for="connection-name-input" class="form-label">Connection Name</label>
+          <input type="text" class="form-control" id="connection-name-input" placeholder="Enter a name for the connection">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" id="save-connection-name-btn" class="btn btn-primary">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
   <!-- Status Indicator Overlay -->
   <div id="status-indicator"
     class="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center bg-dark bg-opacity-75"
@@ -460,6 +483,8 @@
       <p class="mt-3 text-light">Processing...</p>
     </div>
   </div>
+
+
 
   <!-- Alert Container -->
   <div id="alert-container" class="position-fixed top-0 start-50 translate-middle-x mt-3"
