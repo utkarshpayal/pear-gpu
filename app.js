@@ -20,9 +20,94 @@ const connections = {};
 window.openTerminals = {};
 let activePeer = null;
 window.activePeer = null; // Expose to other modules
+hideStatusIndicator();
+
+
+function waitForPeerResponse(expectedMessageFragment, timeout = 900000) {
+  console.log(`[DEBUG] Waiting for peer response with fragment: "${expectedMessageFragment}"`);
+
+  return new Promise((resolve, reject) => {
+    const startTime = Date.now();
+
+    window.handlePeerResponse = (response) => {
+      console.log(`[DEBUG] Received response: ${JSON.stringify(response)}`);
+      if (response && response.success && response.message.includes(expectedMessageFragment)) {
+        console.log(`[DEBUG] Expected response received: ${response.message}`);
+        resolve(response);
+      } else if (Date.now() - startTime > timeout) {
+        console.warn('[WARN] Timeout while waiting for peer response');
+        reject(new Error('Timeout waiting for peer response'));
+      }
+    };
+
+    // Timeout fallback
+    setTimeout(() => {
+      console.warn('[WARN] Timed out waiting for response');
+      reject(new Error('Timed out waiting for peer response'));
+    }, timeout);
+  });
+}
+
+
 
 // Initialize the app
 console.log('[INFO] Client app initialized');
+document.addEventListener('DOMContentLoaded', () => {
+  const statusIndicator = document.getElementById('status-indicator');
+  if (statusIndicator) {
+    statusIndicator.remove();
+    console.log('[INFO] Status indicator removed from DOM on load');
+  }
+});
+// Show Status Indicator
+// Modify showStatusIndicator to recreate it dynamically
+function showStatusIndicator(message = 'Processing...') {
+  const statusIndicator = document.createElement('div');
+  statusIndicator.id = 'status-indicator';
+  statusIndicator.className = 'position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center bg-dark bg-opacity-75';
+  statusIndicator.innerHTML = `
+    <div class="text-center">
+      <div class="spinner-border text-light" role="status">
+        <span class="visually-hidden">Loading...</span>
+      </div>
+      <p class="mt-3 text-light">${message}</p>
+    </div>
+  `;
+  document.body.appendChild(statusIndicator);
+}
+
+function hideStatusIndicator() {
+  const statusIndicator = document.getElementById('status-indicator');
+  if (statusIndicator) {
+    console.log('[DEBUG] Hiding status indicator');
+    statusIndicator.remove();
+  } else {
+    console.error('[ERROR] Status indicator element not found!');
+  }
+}
+// Show Alert
+function showAlert(type, message) {
+  const alertContainer = document.getElementById('alert-container');
+  const alert = document.createElement('div');
+  alert.className = `alert alert-${type} alert-dismissible fade show`;
+  alert.role = 'alert';
+  alert.innerHTML = `
+    ${message}
+    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+  `;
+  alertContainer.appendChild(alert);
+
+  // Automatically hide the status indicator for errors or success
+  if (type === 'danger' || type === 'success') {
+    hideStatusIndicator();
+  }
+
+  // Automatically remove the alert after 5 seconds
+  setTimeout(() => {
+    alert.classList.remove('show');
+    setTimeout(() => alert.remove(), 300); // Bootstrap's fade-out transition duration
+  }, 5000);
+}
 
 // Collapse Sidebar Functionality
 const collapseSidebarBtn = document.getElementById('collapse-sidebar-btn');
@@ -38,10 +123,20 @@ function handlePeerData(data, topicId, peer) {
     const response = JSON.parse(data.toString());
     console.log(`[DEBUG] Received data from peer (topic: ${topicId}): ${JSON.stringify(response)}`);
 
+    if (response.error) {
+      console.error(`[ERROR] Server error: ${response.error}`);
+      showAlert('danger', response.error);
+      hideStatusIndicator();
+      return;
+    }
+
     if (response.type === 'containers') {
       if (window.activePeer === peer) {
         renderContainers(response.data);
       }
+    } else if (response.type === 'stats') {
+      console.log(`[DEBUG] Updating stats for container: ${response.data.id}`);
+      updateContainerStats(response.data); // Call the stats update function
     } else if (response.type === 'terminalOutput') {
       appendTerminalOutput(response.data, response.containerId, response.encoding);
     } else if (response.type === 'containerConfig') {
@@ -49,13 +144,14 @@ function handlePeerData(data, topicId, peer) {
         window.inspectContainerCallback(response.data);
         window.inspectContainerCallback = null; // Reset the callback
       }
-    } else if (response.type === 'stats') {
-      updateContainerStats(response.data);
-    } else if (response.error) {
-      console.error(`[ERROR] Server error: ${response.error}`);
+    }
+
+    if (typeof window.handlePeerResponse === 'function') {
+      window.handlePeerResponse(response);
     }
   } catch (err) {
-    console.error(`[ERROR] Failed to parse data from peer (topic: ${topicId}): ${err.message}`);
+    console.error(`[ERROR] Failed to process peer data: ${err.message}`);
+    showAlert('danger', 'Failed to process peer data.');
   }
 }
 
@@ -344,9 +440,10 @@ function renderContainers(containers) {
 
     // Add event listeners for action buttons
     addActionListeners(row, container);
-        // Add event listener for duplicate button
-        const duplicateBtn = row.querySelector('.action-duplicate');
-        duplicateBtn.addEventListener('click', () => openDuplicateModal(container));
+            // Add event listener for duplicate button
+    const duplicateBtn = row.querySelector('.action-duplicate');
+    duplicateBtn.addEventListener('click', () => openDuplicateModal(container));
+
   });
 }
 
@@ -356,62 +453,119 @@ function addActionListeners(row, container) {
   const removeBtn = row.querySelector('.action-remove');
   const terminalBtn = row.querySelector('.action-terminal');
 
-  startBtn.addEventListener('click', () => {
+  // Start Button
+  startBtn.addEventListener('click', async () => {
+    showStatusIndicator(`Starting container "${container.Names[0]}"...`);
     sendCommand('startContainer', { id: container.Id });
+  
+    const expectedMessageFragment = `Container ${container.Id} started`;
+  
+    try {
+      const response = await waitForPeerResponse(expectedMessageFragment);
+      console.log('[DEBUG] Start container response:', response);
+  
+      showAlert('success', response.message);
+  
+      // Refresh the container list to update states
+      sendCommand('listContainers');
+    } catch (error) {
+      console.error('[ERROR] Failed to start container:', error.message);
+      showAlert('danger', error.message || 'Failed to start container.');
+    } finally {
+      console.log('[DEBUG] Hiding status indicator in startBtn finally block');
+      hideStatusIndicator();
+    }
   });
 
-  stopBtn.addEventListener('click', () => {
+  stopBtn.addEventListener('click', async () => {
+    showStatusIndicator(`Stopping container "${container.Names[0]}"...`);
     sendCommand('stopContainer', { id: container.Id });
+  
+    const expectedMessageFragment = `Container ${container.Id} stopped`;
+  
+    try {
+      const response = await waitForPeerResponse(expectedMessageFragment);
+      console.log('[DEBUG] Stop container response:', response);
+  
+      showAlert('success', response.message);
+  
+      // Refresh the container list to update states
+      sendCommand('listContainers');
+    } catch (error) {
+      console.error('[ERROR] Failed to stop container:', error.message);
+      showAlert('danger', error.message || 'Failed to stop container.');
+    } finally {
+      console.log('[DEBUG] Hiding status indicator in stopBtn finally block');
+      hideStatusIndicator();
+    }
   });
+  
 
-  removeBtn.addEventListener('click', () => {
-    // Show the delete confirmation modal
+  // Remove Button
+  removeBtn.addEventListener('click', async () => {
     const deleteModal = new bootstrap.Modal(document.getElementById('deleteModal'));
     deleteModal.show();
   
-    // Handle confirmation button
     const confirmDeleteBtn = document.getElementById('confirm-delete-btn');
-    confirmDeleteBtn.onclick = () => {
-      console.log(`[INFO] Deleting container: ${container.Id}`);
+    confirmDeleteBtn.onclick = async () => {
+      deleteModal.hide();
+  
+      showStatusIndicator(`Deleting container "${container.Names[0]}"...`);
   
       // Check if the container has active terminals
       if (window.openTerminals[container.Id]) {
         console.log(`[INFO] Closing active terminals for container: ${container.Id}`);
         window.openTerminals[container.Id].forEach((terminalId) => {
           try {
-            cleanUpTerminal(terminalId); // Use your terminal.js cleanup logic
+            cleanUpTerminal(terminalId);
           } catch (err) {
             console.error(`[ERROR] Failed to clean up terminal ${terminalId}: ${err.message}`);
           }
         });
-        delete window.openTerminals[container.Id]; // Remove from open terminals
+        delete window.openTerminals[container.Id];
       }
   
-      // Check if the terminal modal is active and hide it
+      // Hide the terminal modal if it is active
       const terminalModal = document.getElementById('terminal-modal');
       if (terminalModal.style.display === 'flex') {
         console.log(`[INFO] Hiding terminal modal for container: ${container.Id}`);
         terminalModal.style.display = 'none';
       }
   
-      // Send the removeContainer command
       sendCommand('removeContainer', { id: container.Id });
-      deleteModal.hide(); // Close the delete confirmation modal
   
-      // Remove the container row from the container list
-      const row = containerList.querySelector(`tr[data-container-id="${container.Id}"]`);
-      if (row) {
-        row.remove();
-        console.log(`[INFO] Removed container row for container ID: ${container.Id}`);
+      const expectedMessageFragment = `Container ${container.Id} removed`;
+  
+      try {
+        const response = await waitForPeerResponse(expectedMessageFragment);
+        console.log('[DEBUG] Remove container response:', response);
+  
+        showAlert('success', response.message);
+  
+        // Refresh the container list to update states
+        sendCommand('listContainers');
+      } catch (error) {
+        console.error('[ERROR] Failed to delete container:', error.message);
+        showAlert('danger', error.message || `Failed to delete container "${container.Names[0]}".`);
+      } finally {
+        console.log('[DEBUG] Hiding status indicator in removeBtn finally block');
+        hideStatusIndicator();
       }
     };
   });
   
 
   terminalBtn.addEventListener('click', () => {
-    startTerminal(container.Id, container.Names[0] || container.Id);
+    console.log(`[DEBUG] Opening terminal for container ID: ${container.Id}`);
+    try {
+      startTerminal(container.Id, container.Names[0] || container.Id);
+    } catch (error) {
+      console.error(`[ERROR] Failed to start terminal for container ${container.Id}: ${error.message}`);
+      showAlert('danger', `Failed to start terminal: ${error.message}`);
+    }
   });
 }
+
 
 // Function to update container statistics
 function updateContainerStats(stats) {
@@ -444,30 +598,41 @@ function updateContainerStats(stats) {
 function openDuplicateModal(container) {
   console.log(`[INFO] Opening Duplicate Modal for container: ${container.Id}`);
 
-  // Send a command to get container configurations
+  showStatusIndicator('Fetching container configuration...');
+  
+  // Send a command to inspect the container
   sendCommand('inspectContainer', { id: container.Id });
 
-  // Listen for the response
+  // Listen for the inspectContainer response
   window.inspectContainerCallback = (config) => {
+    hideStatusIndicator();
+
     if (!config) {
-      alert('Failed to retrieve container configuration.');
+      console.error('[ERROR] Failed to retrieve container configuration.');
+      showAlert('danger', 'Failed to retrieve container configuration.');
       return;
     }
 
-    console.log("TESTER: " + config.HostConfig?.CpusetCpus)
-    let CPUs = config.HostConfig?.CpusetCpus.split(",");
+    console.log(`[DEBUG] Retrieved container configuration: ${JSON.stringify(config)}`);
 
-    // Populate the modal fields with the current configurations
-    document.getElementById('container-name').value = config.Name.replace(/^\//, '');
-    document.getElementById('container-hostname').value = config.Config.Hostname.replace(/^\//, '');
-    document.getElementById('container-image').value = config.Config.Image;
-    document.getElementById('container-netmode').value = config.HostConfig?.NetworkMode;
-    document.getElementById('container-cpu').value = CPUs.length;
-    document.getElementById('container-memory').value = Math.round(config.HostConfig?.Memory / (1024 * 1024));
-    document.getElementById('container-config').value = JSON.stringify(config, null, 2);
+    // Parse configuration and populate the modal fields
+    try {
+      const CPUs = config.HostConfig?.CpusetCpus?.split(',') || [];
 
-    // Show the modal
-    duplicateModal.show();
+      document.getElementById('container-name').value = config.Name.replace(/^\//, '');
+      document.getElementById('container-hostname').value = config.Config.Hostname || '';
+      document.getElementById('container-image').value = config.Config.Image || '';
+      document.getElementById('container-netmode').value = config.HostConfig?.NetworkMode || '';
+      document.getElementById('container-cpu').value = CPUs.length || 0;
+      document.getElementById('container-memory').value = Math.round(config.HostConfig?.Memory / (1024 * 1024)) || 0;
+      document.getElementById('container-config').value = JSON.stringify(config, null, 2);
+
+      // Show the duplicate modal
+      duplicateModal.show();
+    } catch (error) {
+      console.error(`[ERROR] Failed to populate modal fields: ${error.message}`);
+      showAlert('danger', 'Failed to populate container configuration fields.');
+    }
   };
 }
 
@@ -475,6 +640,9 @@ function openDuplicateModal(container) {
 // Handle the Duplicate Container Form Submission
 duplicateContainerForm.addEventListener('submit', (e) => {
   e.preventDefault();
+  duplicateModal.hide();
+
+  showStatusIndicator('Duplicating container...');
 
   const name = document.getElementById('container-name').value.trim();
   const hostname = document.getElementById('container-hostname').value.trim();
@@ -488,23 +656,21 @@ duplicateContainerForm.addEventListener('submit', (e) => {
   try {
     config = JSON.parse(configJSON);
   } catch (err) {
-    alert('Invalid JSON in configuration.');
+    hideStatusIndicator();
+    showAlert('danger', 'Invalid JSON in configuration.');
     return;
   }
 
-  console.log(`[INFO] Sending duplicateContainer command for name: ${name}`);
-
-  // Send the duplicate command to the server
   sendCommand('duplicateContainer', { name, image, hostname, netmode, cpu, memory, config });
 
-  // Close the modal
-  duplicateModal.hide();
-
-  // Trigger container list update after a short delay
+  // Simulate delay for the demo
   setTimeout(() => {
-    console.log('[INFO] Fetching updated container list after duplication');
+    hideStatusIndicator();
+    showAlert('success', 'Container duplicated successfully!');
+
+    // Refresh container list
     sendCommand('listContainers');
-  }, 2000); // Wait for duplication to complete
+  }, 2000); // Simulated processing time
 });
 
 
