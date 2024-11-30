@@ -255,7 +255,7 @@ function addConnection(topicHex) {
 
       if (window.activePeer === peer) {
         window.activePeer = null;
-        connectionTitle.textContent = 'Disconnected';
+        // connectionTitle.textContent = 'Disconnected';
         dashboard.classList.add('hidden');
         containerList.innerHTML = '';
       }
@@ -265,6 +265,15 @@ function addConnection(topicHex) {
       switchConnection(topicId);
     }
   });
+
+  // Automatically collapse the sidebar when a new connection is added
+  const sidebar = document.getElementById('sidebar');
+  const collapseSidebarBtn = document.getElementById('collapse-sidebar-btn');
+  if (!sidebar.classList.contains('collapsed')) {
+    sidebar.classList.add('collapsed');
+    collapseSidebarBtn.innerHTML = '&gt;';
+    console.log('[DEBUG] Sidebar auto-collapsed after adding a new connection');
+  }
 }
 
 
