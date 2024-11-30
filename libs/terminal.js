@@ -6,10 +6,16 @@ const terminalModal = document.getElementById('terminal-modal');
 const terminalTitle = document.getElementById('terminal-title');
 const terminalContainer = document.getElementById('terminal-container');
 const tray = document.getElementById('tray');
+const terminalHeader = document.querySelector('#terminal-modal .header');
 
 // Terminal variables
 let terminalSessions = {}; // Track terminal sessions per containerId
 let activeContainerId = null; // Currently displayed containerId
+
+// Variables for resizing
+let isResizing = false;
+let startY = 0;
+let startHeight = 0;
 
 // Kill Terminal button functionality
 document.getElementById('kill-terminal-btn').onclick = () => {
@@ -38,6 +44,42 @@ function killActiveTerminal() {
     console.error('[ERROR] No terminal session found to kill.');
   }
 }
+
+// Start resizing when the mouse is down on the header
+terminalHeader.addEventListener('mousedown', (e) => {
+  isResizing = true;
+  startY = e.clientY; // Track the initial Y position
+  startHeight = terminalModal.offsetHeight; // Track the initial height
+  document.body.style.cursor = 'ns-resize'; // Change cursor to indicate resizing
+  e.preventDefault(); // Prevent text selection
+});
+
+// Resize the modal while dragging
+document.addEventListener('mousemove', (e) => {
+  if (isResizing) {
+    const deltaY = startY - e.clientY; // Calculate how much the mouse moved
+    const newHeight = Math.min(
+      Math.max(startHeight + deltaY, 150), // Minimum height: 150px
+      window.innerHeight * 0.9 // Maximum height: 90% of viewport height
+    );
+
+    terminalModal.style.height = `${newHeight}px`; // Set new height
+    terminalContainer.style.height = `${newHeight - 40}px`; // Adjust terminal container height
+
+    const activeSession = terminalSessions[activeContainerId];
+    if (activeSession) {
+      setTimeout(() => activeSession.fitAddon.fit(), 10); // Adjust terminal content
+    }
+  }
+});
+
+// Stop resizing when the mouse is released
+document.addEventListener('mouseup', () => {
+  if (isResizing) {
+    isResizing = false;
+    document.body.style.cursor = 'default'; // Reset cursor
+  }
+});
 
 // Start terminal session
 function startTerminal(containerId, containerName) {
