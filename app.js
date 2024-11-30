@@ -48,26 +48,29 @@ function startStatsInterval() {
     } else {
       console.warn('[WARN] No active peer; skipping stats request.');
     }
-  }, 500); // Poll every 100ms for better reactivity
+  }, 100); // Poll every 100ms for better reactivity
 }
 const smoothedStats = {}; // Container-specific smoothing storage
 
-
 function smoothStats(containerId, newStats, smoothingFactor = 0.2) {
   if (!smoothedStats[containerId]) {
-      smoothedStats[containerId] = { cpu: 0, memory: 0 };
+    smoothedStats[containerId] = { cpu: 0, memory: 0, ip: newStats.ip || 'No IP Assigned' };
   }
 
   smoothedStats[containerId].cpu =
-      smoothedStats[containerId].cpu * (1 - smoothingFactor) +
-      newStats.cpu * smoothingFactor;
+    smoothedStats[containerId].cpu * (1 - smoothingFactor) +
+    newStats.cpu * smoothingFactor;
 
   smoothedStats[containerId].memory =
-      smoothedStats[containerId].memory * (1 - smoothingFactor) +
-      newStats.memory * smoothingFactor;
+    smoothedStats[containerId].memory * (1 - smoothingFactor) +
+    newStats.memory * smoothingFactor;
+
+  // Preserve the latest IP address
+  smoothedStats[containerId].ip = newStats.ip || smoothedStats[containerId].ip;
 
   return smoothedStats[containerId];
 }
+
 
 function refreshContainerStats() {
   console.log('[INFO] Refreshing container stats...');
@@ -297,29 +300,21 @@ function handlePeerData(data, topicId, peer) {
       return;
     }
 
-    // Handle errors in the response
-    if (response.error) {
-      console.error(`[ERROR] Server error received: ${response.error}`);
-      showAlert('danger', response.error);
-      hideStatusIndicator();
-      return;
-    }
-
     // Delegate handling based on the response type
     switch (response.type) {
+      case 'stats':
+        console.log('[INFO] Updating container stats...');
+        
+        // Ensure IP is included and passed to updateContainerStats
+        const stats = response.data;
+        stats.ip = stats.ip || 'No IP Assigned'; // Add a fallback for missing IPs
+        console.log(`[DEBUG] Passing stats to updateContainerStats: ${JSON.stringify(stats, null, 2)}`);
+        updateContainerStats(stats);
+        break;
+
       case 'containers':
         console.log('[INFO] Processing container list...');
         renderContainers(response.data, topicId); // Render containers specific to this topic
-        break;
-
-      case 'stats':
-        console.log('[INFO] Updating container stats...');
-        if (!response.data.id) {
-          console.warn('[WARN] Stats response is missing container ID. Skipping update.');
-          return;
-        }
-        response.data.topicId = topicId; // Attach the topicId to the stats
-        updateContainerStats(response.data); // Update stats for the specified container
         break;
 
       case 'terminalOutput':
@@ -631,6 +626,10 @@ function renderContainers(containers, topicId) {
     const image = container.Image || '-';
     const containerId = container.Id;
     const ipAddress = container.ipAddress || 'No IP Assigned';
+    if (ipAddress === 'No IP Assigned') {
+      console.warn(`[WARN] IP address missing for container ${container.Id}. Retrying...`);
+      sendCommand('inspectContainer', { id: container.Id });
+    }
 
     const row = document.createElement('tr');
     row.dataset.containerId = containerId; // Store container ID for reference
@@ -832,33 +831,36 @@ function addActionListeners(row, container) {
 }
 
 
-function updateStatsUI(row, stats) {
-  requestIdleCallback(() => {
-    row.querySelector('.cpu').textContent = stats.cpu.toFixed(2) || '0.00';
-    row.querySelector('.memory').textContent = (stats.memory / (1024 * 1024)).toFixed(2) || '0.00';
-    row.querySelector('.ip-address').textContent = stats.ip || 'No IP Assigned';
-  });
-}
-
 function updateContainerStats(stats) {
   if (!stats || !stats.id || typeof stats.cpu === 'undefined' || typeof stats.memory === 'undefined') {
-      console.error('[ERROR] Invalid stats object:', stats);
-      return;
+    console.error('[ERROR] Invalid stats object:', stats);
+    return;
   }
 
   console.log(`[DEBUG] Updating stats for container ID: ${stats.id}`);
 
   const row = containerList.querySelector(`tr[data-container-id="${stats.id}"]`);
   if (!row) {
-      console.warn(`[WARN] No matching row for container ID: ${stats.id}`);
-      return;
+    console.warn(`[WARN] No matching row for container ID: ${stats.id}`);
+    return;
   }
+
+  // Ensure the IP address is added or retained from existing row
+  const existingIpAddress = row.querySelector('.ip-address')?.textContent || 'No IP Assigned';
+  stats.ip = stats.ip || existingIpAddress;
 
   const smoothed = smoothStats(stats.id, stats);
   updateStatsUI(row, smoothed);
 }
 
-
+function updateStatsUI(row, stats) {
+  console.log("HAHHAHAHAHAHHAHA " + JSON.stringify(stats, null, 2));
+  requestIdleCallback(() => {
+    row.querySelector('.cpu').textContent = stats.cpu.toFixed(2) || '0.00';
+    row.querySelector('.memory').textContent = (stats.memory / (1024 * 1024)).toFixed(2) || '0.00';
+    row.querySelector('.ip-address').textContent = stats.ip;
+  });
+}
 
 
 // Function to open the Duplicate Modal with container configurations
