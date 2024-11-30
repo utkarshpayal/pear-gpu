@@ -341,7 +341,6 @@ function renderContainers(containers) {
   });
 }
 
-// Add event listeners to action buttons
 function addActionListeners(row, container) {
   const startBtn = row.querySelector('.action-start');
   const stopBtn = row.querySelector('.action-stop');
@@ -357,7 +356,16 @@ function addActionListeners(row, container) {
   });
 
   removeBtn.addEventListener('click', () => {
-    sendCommand('removeContainer', { id: container.Id });
+    // Show the delete confirmation modal
+    const deleteModal = new bootstrap.Modal(document.getElementById('deleteModal'));
+    deleteModal.show();
+
+    // Handle confirmation button
+    const confirmDeleteBtn = document.getElementById('confirm-delete-btn');
+    confirmDeleteBtn.onclick = () => {
+      sendCommand('removeContainer', { id: container.Id }); // Remove the container
+      deleteModal.hide(); // Close the modal
+    };
   });
 
   terminalBtn.addEventListener('click', () => {
