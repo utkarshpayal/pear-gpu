@@ -22,6 +22,9 @@
       color: white;
       overflow: hidden;
     }
+    .hidden {
+    display: none !important;
+}
 
     #titlebar {
       -webkit-app-region: drag;
@@ -75,12 +78,14 @@
     }
 
     #content {
-      margin-left: 250px;
-      flex: 1;
-      padding: 30px;
-      overflow-y: auto;
-      transition: margin-left 0.3s ease-in-out;
-    }
+  display: flex;
+  flex-direction: column; /* Keep vertical stacking for child elements */
+  margin-left: 250px; /* Leave space for the sidebar */
+  flex: 1; /* Allow the content to grow */
+  padding: 30px;
+  overflow-y: auto; /* Allow scrolling if content overflows */
+  position: relative;
+}
 
     #sidebar.collapsed~#content {
       margin-left: 50px;
@@ -188,6 +193,40 @@
       color: #fff;
       font-size: 1.25rem;
     }
+
+    #welcome-page {
+  display: flex;
+  flex-direction: column; /* Stack child elements vertically */
+  justify-content: center; /* Center content vertically */
+  align-items: center; /* Center content horizontally */
+  text-align: center; /* Center-align text */
+  position: absolute; /* Overlay it over the content area */
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%); /* Center it perfectly in the content */
+  max-width: 800px; /* Restrict the width of the welcome page */
+  width: 100%; /* Allow it to scale */
+  padding: 20px;
+  background-color: transparent; /* Match the theme */
+}
+
+#welcome-page.hidden {
+  display: none !important; /* Completely hide when not needed */
+}
+
+#dashboard {
+  display: flex; /* Use flex layout for content within the dashboard */
+  flex-direction: column; /* Stack elements vertically */
+  flex: 1; /* Ensure it uses all available space */
+  width: 100%; /* Take up the full width of the content area */
+  padding: 0; /* Remove extra padding */
+  overflow-y: auto; /* Allow vertical scrolling if needed */
+  position: relative; /* Prevent overlap with other elements */
+}
+
+#dashboard.hidden {
+  display: none !important; /* Hide the dashboard completely when not needed */
+}
   </style>
 </head>
 
@@ -210,7 +249,12 @@
   </div>
 
   <div id="content">
-    <h1 id="connection-title">Add a Connection</h1>
+    <div id="welcome-page">
+      <h1>Welcome to Peartainer</h1>
+      <p class="mt-3">Easily manage your Docker containers across peer-to-peer connections.</p>
+      <p>To get started, add a connection using the form in the sidebar.</p>
+      <!-- <img src="https://via.placeholder.com/500x300" alt="Welcome Graphic" class="img-fluid mt-4"> -->
+    </div>
     <div id="dashboard" class="hidden">
       <h2>Containers</h2>
       <table class="table table-dark table-striped">
@@ -229,6 +273,7 @@
       </table>
     </div>
   </div>
+  
 
   <!-- Duplicate Container Modal -->
   <div class="modal fade" id="duplicateModal" tabindex="-1" aria-labelledby="duplicateModalLabel" aria-hidden="true">

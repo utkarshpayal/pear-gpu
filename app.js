@@ -53,12 +53,29 @@ function waitForPeerResponse(expectedMessageFragment, timeout = 900000) {
 // Initialize the app
 console.log('[INFO] Client app initialized');
 document.addEventListener('DOMContentLoaded', () => {
-  const statusIndicator = document.getElementById('status-indicator');
-  if (statusIndicator) {
-    statusIndicator.remove();
-    console.log('[INFO] Status indicator removed from DOM on load');
+  console.log('[INFO] Initializing Client App');
+
+  const connectionTitle = document.getElementById('connection-title');
+  if (!connectionTitle) {
+    console.error('[ERROR] Connection title element is missing! Creating dynamically...');
+    const content = document.getElementById('content');
+    const titleElement = document.createElement('h1');
+    titleElement.id = 'connection-title';
+    titleElement.textContent = '󠀠';
+    titleElement.classList.add('hidden'); // Initially hidden
+    content.insertBefore(titleElement, content.firstChild);
   }
+
+  if (Object.keys(connections).length === 0) {
+    showWelcomePage();
+  } else {
+    hideWelcomePage();
+  }
+
+  assertVisibility(); // Ensure visibility is correct after initialization
 });
+
+
 // Show Status Indicator
 // Modify showStatusIndicator to recreate it dynamically
 function showStatusIndicator(message = 'Processing...') {
@@ -169,10 +186,18 @@ addConnectionForm.addEventListener('submit', (e) => {
 
 // Function to add a new connection
 function addConnection(topicHex) {
+  console.log(`[DEBUG] Adding connection with topic: ${topicHex}`);
+  
+  if (Object.keys(connections).length === 0) {
+    console.log('[DEBUG] Hiding welcome page after first connection');
+    hideWelcomePage(); // Hide the welcome page when the first connection is added
+  }
+
   const topic = b4a.from(topicHex, 'hex');
   const topicId = topicHex.substring(0, 12);
 
   console.log(`[INFO] Adding connection with topic: ${topicHex}`);
+  assertVisibility(); // Ensure visibility reflects the added connection
 
   const connectionItem = document.createElement('li');
   connectionItem.className = 'list-group-item d-flex align-items-center justify-content-between';
@@ -200,6 +225,8 @@ function addConnection(topicHex) {
 
   connections[topicId] = { topic, peer: null, swarm: null };
 
+  console.log('[DEBUG] Updated connections object:', connections);
+
   // Create a new swarm for this connection
   const swarm = new Hyperswarm();
   connections[topicId].swarm = swarm;
@@ -209,7 +236,6 @@ function addConnection(topicHex) {
   swarm.on('connection', (peer) => {
     console.log(`[INFO] Connected to peer for topic: ${topicHex}`);
 
-    // Prevent duplicate connections
     if (connections[topicId].peer) {
       console.warn(`[WARN] Duplicate connection detected for topic: ${topicId}. Closing.`);
       peer.destroy();
@@ -235,21 +261,12 @@ function addConnection(topicHex) {
       }
     });
 
-    // If this is the first connection, switch to it
     if (!window.activePeer) {
       switchConnection(topicId);
     }
   });
-
-  // Collapse the sidebar after adding a new connection
-  const sidebar = document.getElementById('sidebar');
-  const collapseSidebarBtn = document.getElementById('collapse-sidebar-btn');
-  if (!sidebar.classList.contains('collapsed')) {
-    sidebar.classList.add('collapsed');
-    collapseSidebarBtn.innerHTML = '&gt;';
-    console.log('[INFO] Sidebar collapsed after adding new connection.');
-  }
 }
+
 
 
 function disconnectConnection(topicId, connectionItem) {
@@ -259,22 +276,22 @@ function disconnectConnection(topicId, connectionItem) {
     return;
   }
 
-  // Close and kill any open terminals associated with this connection
+  // Close and clean up open terminals associated with this connection
   if (window.openTerminals[topicId]) {
     console.log(`[INFO] Closing terminals for topic: ${topicId}`);
     window.openTerminals[topicId].forEach((containerId) => {
       try {
         cleanUpTerminal(containerId); // Use the terminal.js cleanup logic
       } catch (err) {
-        console.error(`[ERROR] Failed to kill terminal for container ${containerId}: ${err.message}`);
+        console.error(`[ERROR] Failed to clean up terminal for container ${containerId}: ${err.message}`);
       }
     });
     delete window.openTerminals[topicId];
   }
 
-  // Hide the terminal modal if it is active
+  // Hide the terminal modal if it's active
   const terminalModal = document.getElementById('terminal-modal');
-  if (terminalModal.style.display === 'flex') {
+  if (terminalModal && terminalModal.style.display === 'flex') {
     console.log(`[INFO] Hiding terminal modal for disconnected topic: ${topicId}`);
     terminalModal.style.display = 'none';
   }
@@ -293,7 +310,9 @@ function disconnectConnection(topicId, connectionItem) {
   delete connections[topicId];
 
   // Remove the connection item from the list
-  connectionList.removeChild(connectionItem);
+  if (connectionItem) {
+    connectionList.removeChild(connectionItem);
+  }
 
   console.log(`[INFO] Disconnected and removed connection: ${topicId}`);
 
@@ -305,12 +324,19 @@ function disconnectConnection(topicId, connectionItem) {
     containerList.innerHTML = ''; // Clear the container list
   }
 
+  // Check if no connections remain, and show the welcome page
+  if (Object.keys(connections).length === 0) {
+    console.log('[DEBUG] All connections removed. Showing welcome page.');
+    showWelcomePage();
+  }
+
   // Ensure the container list is cleared regardless of the active connection
   resetContainerList();
 
   // Refresh the connections view
   resetConnectionsView();
 }
+
 // Function to reset the container list
 function resetContainerList() {
   containerList.innerHTML = ''; // Clear the existing list
@@ -361,24 +387,31 @@ function updateConnectionStatus(topicId, isConnected) {
 // Switch between connections
 function switchConnection(topicId) {
   const connection = connections[topicId];
-  if (!connection) {
-    console.error(`[ERROR] No connection found for topicId: ${topicId}`);
-    connectionTitle.textContent = 'Choose a Connection'; // Default message
+  const connectionTitle = document.getElementById('connection-title');
+
+  if (!connection || !connection.peer) {
+    console.error('[ERROR] No connection found or no active peer.');
+
+    // Update title if element exists
+    if (connectionTitle) {
+      connectionTitle.textContent = '󠀠';
+      connectionTitle.classList.add('hidden');
+    }
+
+    showWelcomePage(); // Show welcome page
     return;
   }
 
-  if (!connection.peer) {
-    console.error('[ERROR] No active peer for this connection.');
-    connectionTitle.textContent = 'Choose a Connection'; // Default message
-    return;
-  }
-
+  // Set active peer and update UI
   window.activePeer = connection.peer;
-  connectionTitle.textContent = `Connection: ${topicId}`;
-  dashboard.classList.remove('hidden');
 
-  console.log('[INFO] Sending "listContainers" command');
-  sendCommand('listContainers');
+  if (connectionTitle) {
+    connectionTitle.textContent = `Connection: ${topicId}`;
+    connectionTitle.classList.remove('hidden');
+  }
+
+  hideWelcomePage(); // Hide the welcome page
+  sendCommand('listContainers'); // Request container list
 }
 
 // Attach switchConnection to the global window object
@@ -674,6 +707,56 @@ duplicateContainerForm.addEventListener('submit', (e) => {
 });
 
 
+function showWelcomePage() {
+  const welcomePage = document.getElementById('welcome-page');
+  const dashboard = document.getElementById('dashboard');
+  const connectionTitle = document.getElementById('connection-title');
+
+  if (welcomePage) {
+    welcomePage.classList.remove('hidden');
+  }
+
+  if (dashboard) {
+    dashboard.classList.add('hidden');
+  }
+
+  if (connectionTitle) {
+    connectionTitle.textContent = '󠀠';
+  } else {
+    console.warn('[WARN] Connection title element not found!');
+  }
+}
+
+function hideWelcomePage() {
+  const welcomePage = document.getElementById('welcome-page');
+  const dashboard = document.getElementById('dashboard');
+
+  if (welcomePage) {
+    console.log('[DEBUG] Hiding welcome page');
+    welcomePage.classList.add('hidden'); // Hide the welcome page
+  } else {
+    console.error('[ERROR] Welcome page element not found!');
+  }
+
+  if (dashboard) {
+    console.log('[DEBUG] Showing dashboard');
+    dashboard.classList.remove('hidden'); // Show the dashboard
+  } else {
+    console.error('[ERROR] Dashboard element not found!');
+  }
+}
+
+function assertVisibility() {
+  const welcomePage = document.getElementById('welcome-page');
+  const dashboard = document.getElementById('dashboard');
+  if (Object.keys(connections).length === 0) {
+    console.assert(!welcomePage.classList.contains('hidden'), '[ASSERTION FAILED] Welcome page should be visible.');
+    console.assert(dashboard.classList.contains('hidden'), '[ASSERTION FAILED] Dashboard should be hidden.');
+  } else {
+    console.assert(welcomePage.classList.contains('hidden'), '[ASSERTION FAILED] Welcome page should be hidden.');
+    console.assert(!dashboard.classList.contains('hidden'), '[ASSERTION FAILED] Dashboard should be visible.');
+  }
+}
 // Attach startTerminal to the global window object
 window.startTerminal = startTerminal;
 
