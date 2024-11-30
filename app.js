@@ -20,6 +20,7 @@ const connections = {};
 window.openTerminals = {};
 let activePeer = null;
 window.activePeer = null; // Expose to other modules
+
 hideStatusIndicator();
 let statsInterval = null;
 let lastStatsUpdate = Date.now();
@@ -47,15 +48,25 @@ function startStatsInterval() {
     } else {
       console.warn('[WARN] No active peer; skipping stats request.');
     }
-  }, 100); // Poll every 100ms for better reactivity
+  }, 500); // Poll every 100ms for better reactivity
 }
+const smoothedStats = {}; // Container-specific smoothing storage
 
-let smoothedStats = { cpu: 0, memory: 0 };
 
-function smoothStats(newStats, smoothingFactor = 0.2) {
-  smoothedStats.cpu = smoothedStats.cpu * (1 - smoothingFactor) + newStats.cpu * smoothingFactor;
-  smoothedStats.memory = smoothedStats.memory * (1 - smoothingFactor) + newStats.memory * smoothingFactor;
-  return smoothedStats;
+function smoothStats(containerId, newStats, smoothingFactor = 0.2) {
+  if (!smoothedStats[containerId]) {
+      smoothedStats[containerId] = { cpu: 0, memory: 0 };
+  }
+
+  smoothedStats[containerId].cpu =
+      smoothedStats[containerId].cpu * (1 - smoothingFactor) +
+      newStats.cpu * smoothingFactor;
+
+  smoothedStats[containerId].memory =
+      smoothedStats[containerId].memory * (1 - smoothingFactor) +
+      newStats.memory * smoothingFactor;
+
+  return smoothedStats[containerId];
 }
 
 function refreshContainerStats() {
@@ -271,45 +282,76 @@ collapseSidebarBtn.addEventListener('click', () => {
 
 function handlePeerData(data, topicId, peer) {
   try {
+    // Parse the incoming data
     const response = JSON.parse(data.toString());
     console.log(`[DEBUG] Received data from peer (topic: ${topicId}): ${JSON.stringify(response)}`);
 
     // Ensure the data is for the active connection
-    if (!connections[topicId] || peer !== window.activePeer) {
-      console.warn(`[WARN] Ignoring data from inactive peer or topic: ${topicId}`);
+    if (!connections[topicId]) {
+      console.warn(`[WARN] No connection found for topic: ${topicId}. Ignoring data.`);
       return;
     }
 
-    // Process the response based on its type
+    if (peer !== connections[topicId].peer) {
+      console.warn(`[WARN] Ignoring data from a non-active peer for topic: ${topicId}`);
+      return;
+    }
+
+    // Handle errors in the response
     if (response.error) {
-      console.error(`[ERROR] Server error: ${response.error}`);
+      console.error(`[ERROR] Server error received: ${response.error}`);
       showAlert('danger', response.error);
       hideStatusIndicator();
       return;
     }
 
-    if (response.type === 'containers') {
-      renderContainers(response.data, topicId); // Scope containers to this topic
-    } else if (response.type === 'stats') {
-      response.data.topicId = topicId; // Attach the topicId to the stats
-      updateContainerStats(response.data); // Update stats for specific containers
-    } else if (response.type === 'terminalOutput') {
-      appendTerminalOutput(response.data, response.containerId, response.encoding);
-    } else if (response.type === 'containerConfig') {
-      if (window.inspectContainerCallback) {
-        window.inspectContainerCallback(response.data);
-        window.inspectContainerCallback = null; // Reset the callback
-      }
+    // Delegate handling based on the response type
+    switch (response.type) {
+      case 'containers':
+        console.log('[INFO] Processing container list...');
+        renderContainers(response.data, topicId); // Render containers specific to this topic
+        break;
+
+      case 'stats':
+        console.log('[INFO] Updating container stats...');
+        if (!response.data.id) {
+          console.warn('[WARN] Stats response is missing container ID. Skipping update.');
+          return;
+        }
+        response.data.topicId = topicId; // Attach the topicId to the stats
+        updateContainerStats(response.data); // Update stats for the specified container
+        break;
+
+      case 'terminalOutput':
+        console.log('[INFO] Appending terminal output...');
+        appendTerminalOutput(response.data, response.containerId, response.encoding);
+        break;
+
+      case 'containerConfig':
+        console.log('[INFO] Handling container configuration...');
+        if (window.inspectContainerCallback) {
+          window.inspectContainerCallback(response.data);
+          window.inspectContainerCallback = null; // Reset the callback
+        }
+        break;
+
+      default:
+        console.warn(`[WARN] Unhandled response type: ${response.type}`);
+        break;
     }
 
+    // Handle peer response callback if defined
     if (typeof window.handlePeerResponse === 'function') {
       window.handlePeerResponse(response);
     }
   } catch (err) {
+    // Catch and log any parsing or processing errors
     console.error(`[ERROR] Failed to process peer data: ${err.message}`);
-    showAlert('danger', 'Failed to process peer data.');
+    console.error(`[DEBUG] Raw data received: ${data.toString()}`);
+    showAlert('danger', 'Failed to process peer data. Check the console for details.');
   }
 }
+
 
 
 
@@ -799,20 +841,22 @@ function updateStatsUI(row, stats) {
 }
 
 function updateContainerStats(stats) {
-  if (!window.activePeer || !connections[stats.topicId] || window.activePeer !== connections[stats.topicId].peer) {
-    return;
+  if (!stats || !stats.id || typeof stats.cpu === 'undefined' || typeof stats.memory === 'undefined') {
+      console.error('[ERROR] Invalid stats object:', stats);
+      return;
   }
+
+  console.log(`[DEBUG] Updating stats for container ID: ${stats.id}`);
 
   const row = containerList.querySelector(`tr[data-container-id="${stats.id}"]`);
   if (!row) {
-    return;
+      console.warn(`[WARN] No matching row for container ID: ${stats.id}`);
+      return;
   }
 
-  // Smooth incoming stats
-  const smoothed = smoothStats(stats);
+  const smoothed = smoothStats(stats.id, stats);
   updateStatsUI(row, smoothed);
 }
-
 
 
 
