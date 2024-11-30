@@ -335,6 +335,9 @@ function renderContainers(containers) {
 
     // Add event listeners for action buttons
     addActionListeners(row, container);
+        // Add event listener for duplicate button
+        const duplicateBtn = row.querySelector('.action-duplicate');
+        duplicateBtn.addEventListener('click', () => openDuplicateModal(container));
   });
 }
 
