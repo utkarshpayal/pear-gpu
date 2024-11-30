@@ -368,14 +368,45 @@ function addActionListeners(row, container) {
     // Show the delete confirmation modal
     const deleteModal = new bootstrap.Modal(document.getElementById('deleteModal'));
     deleteModal.show();
-
+  
     // Handle confirmation button
     const confirmDeleteBtn = document.getElementById('confirm-delete-btn');
     confirmDeleteBtn.onclick = () => {
-      sendCommand('removeContainer', { id: container.Id }); // Remove the container
-      deleteModal.hide(); // Close the modal
+      console.log(`[INFO] Deleting container: ${container.Id}`);
+  
+      // Check if the container has active terminals
+      if (window.openTerminals[container.Id]) {
+        console.log(`[INFO] Closing active terminals for container: ${container.Id}`);
+        window.openTerminals[container.Id].forEach((terminalId) => {
+          try {
+            cleanUpTerminal(terminalId); // Use your terminal.js cleanup logic
+          } catch (err) {
+            console.error(`[ERROR] Failed to clean up terminal ${terminalId}: ${err.message}`);
+          }
+        });
+        delete window.openTerminals[container.Id]; // Remove from open terminals
+      }
+  
+      // Check if the terminal modal is active and hide it
+      const terminalModal = document.getElementById('terminal-modal');
+      if (terminalModal.style.display === 'flex') {
+        console.log(`[INFO] Hiding terminal modal for container: ${container.Id}`);
+        terminalModal.style.display = 'none';
+      }
+  
+      // Send the removeContainer command
+      sendCommand('removeContainer', { id: container.Id });
+      deleteModal.hide(); // Close the delete confirmation modal
+  
+      // Remove the container row from the container list
+      const row = containerList.querySelector(`tr[data-container-id="${container.Id}"]`);
+      if (row) {
+        row.remove();
+        console.log(`[INFO] Removed container row for container ID: ${container.Id}`);
+      }
     };
   });
+  
 
   terminalBtn.addEventListener('click', () => {
     startTerminal(container.Id, container.Names[0] || container.Id);
