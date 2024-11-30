@@ -72,13 +72,38 @@ function deleteCookie(name) {
 // Load connections from cookies
 function loadConnections() {
   const savedConnections = getCookie('connections');
-  return savedConnections ? JSON.parse(savedConnections) : {};
+  const connections = savedConnections ? JSON.parse(savedConnections) : {};
+
+  // Recreate the topic Buffer from the hex string
+  for (const topicId in connections) {
+    const { topicHex } = connections[topicId];
+    connections[topicId] = {
+      topic: b4a.from(topicHex, 'hex'),
+      topicHex,
+      peer: null, // Initialize additional properties
+      swarm: null,
+    };
+  }
+
+  return connections;
 }
+
 
 // Save connections to cookies
 function saveConnections() {
-  setCookie('connections', JSON.stringify(connections));
+  const serializableConnections = {};
+
+  for (const topicId in connections) {
+    const { topic, topicHex } = connections[topicId]; // Only serialize simple properties
+    serializableConnections[topicId] = {
+      topicHex,
+      topic: b4a.toString(topic, 'hex'), // Convert Buffer to hex string
+    };
+  }
+
+  setCookie('connections', JSON.stringify(serializableConnections));
 }
+
 
 // Add Reset Connections Button
 // Toggle Reset Connections Button Visibility
@@ -117,8 +142,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Restore saved connections
   Object.keys(savedConnections).forEach((topicId) => {
-    const topicHex = savedConnections[topicId].topicHex;
-    addConnection(topicHex); // Add connections using the saved topicHex
+    let topicHex = savedConnections[topicId].topic;
+  
+    // Ensure topicHex is a string
+    if (typeof topicHex !== 'string') {
+      topicHex = b4a.toString(topicHex, 'hex');
+    }
+  
+    addConnection(topicHex);
   });
 
   if (Object.keys(connections).length > 0) {
