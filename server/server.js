@@ -58,25 +58,38 @@ swarm.on('connection', (peer) => {
       switch (parsedData.command) {
         case 'listContainers':
           console.log('[INFO] Handling \'listContainers\' command');
-          const containers = await docker.listContainers({ all: true });
+          try {
+            const containers = await docker.listContainers({ all: true });
         
-          const detailedContainers = await Promise.all(
-            containers.map(async (container) => {
-              const details = await docker.getContainer(container.Id).inspect();
-              console.log(details.NetworkSettings.Networks); // Log the network details
-          
-              // Safely access the IP address
-              const ipAddress = details.NetworkSettings.Networks
-                ? Object.values(details.NetworkSettings.Networks)[0]?.IPAddress || 'No IP Assigned'
-                : 'No Networks';
-          
-              return { ...container, ipAddress }; // Add IP address to container data
-            })
-          );
+            const detailedContainers = await Promise.all(
+              containers.map(async (container) => {
+                try {
+                  const details = await docker.getContainer(container.Id).inspect();
         
-          response = { type: 'containers', data: detailedContainers };
+                  // Safely access the IP address
+                  let ipAddress = 'No IP Assigned';
+                  if (details.NetworkSettings && details.NetworkSettings.Networks) {
+                    const networks = Object.values(details.NetworkSettings.Networks);
+                    if (networks.length > 0 && networks[0].IPAddress) {
+                      ipAddress = networks[0].IPAddress;
+                    }
+                  }
+        
+                  return { ...container, ipAddress }; // Add IP address to container data
+                } catch (error) {
+                  console.error(`[ERROR] Failed to inspect container ${container.Id}: ${error.message}`);
+                  return { ...container, ipAddress: 'Error Retrieving IP' }; // Return partial data with error
+                }
+              })
+            );
+        
+            response = { type: 'containers', data: detailedContainers };
+          } catch (error) {
+            console.error(`[ERROR] Failed to list containers: ${error.message}`);
+            response = { error: 'Failed to list containers' };
+          }
           break;
-
+        
         case 'inspectContainer':
           console.log(`[INFO] Handling 'inspectContainer' command for container: ${parsedData.args.id}`);
           const container = docker.getContainer(parsedData.args.id);
@@ -280,43 +293,63 @@ docker.getEvents({}, (err, stream) => {
 });
 
 // Collect and stream container stats
-docker.listContainers({ all: true }, (err, containers) => {
+docker.listContainers({ all: true }, async (err, containers) => {
   if (err) {
     console.error(`[ERROR] Failed to list containers for stats: ${err.message}`);
     return;
   }
 
+  // Iterate over all containers
   containers.forEach((containerInfo) => {
     const container = docker.getContainer(containerInfo.Id);
-    container.stats({ stream: true }, (err, stream) => {
-      if (err) {
-        return;
+
+    // Use the same logic as listContainers to pre-inspect and extract the IP address
+    container.inspect((inspectErr, details) => {
+      let ipAddress = 'No IP Assigned'; // Default fallback
+
+      if (!inspectErr && details.NetworkSettings && details.NetworkSettings.Networks) {
+        const networks = Object.values(details.NetworkSettings.Networks);
+        if (networks.length > 0 && networks[0].IPAddress) {
+          ipAddress = networks[0].IPAddress; // Use the first network's IP
+        }
       }
 
-      stream.on('data', (data) => {
-        try {
-          const stats = JSON.parse(data.toString());
-          const cpuUsage = calculateCPUPercent(stats);
-          const memoryUsage = stats.memory_stats.usage;
-          const networks = stats.networks;
-          const ipAddress = networks ? Object.values(networks)[0].IPAddress : '-';
-
-          const statsData = {
-            id: containerInfo.Id,
-            cpu: cpuUsage,
-            memory: memoryUsage,
-            ip: ipAddress,
-          };
-
-          // Broadcast stats to all connected peers
-          for (const peer of connectedPeers) {
-            peer.write(JSON.stringify({ type: 'stats', data: statsData }));
-          }
-        } catch (err) {
+      // Start streaming container stats
+      container.stats({ stream: true }, (statsErr, stream) => {
+        if (statsErr) {
+          console.error(`[ERROR] Failed to get stats for container ${containerInfo.Id}: ${statsErr.message}`);
+          return;
         }
-      });
 
-      stream.on('error', (err) => {
+        stream.on('data', (data) => {
+          try {
+            const stats = JSON.parse(data.toString());
+            const cpuUsage = calculateCPUPercent(stats);
+            const memoryUsage = stats.memory_stats.usage || 0; // Default to 0 if undefined
+
+            const statsData = {
+              id: containerInfo.Id,
+              cpu: cpuUsage,
+              memory: memoryUsage,
+              ip: ipAddress, // Use the pre-inspected IP address
+            };
+
+            // Broadcast stats to all connected peers
+            for (const peer of connectedPeers) {
+              peer.write(JSON.stringify({ type: 'stats', data: statsData }));
+            }
+          } catch (parseErr) {
+            console.error(`[ERROR] Failed to parse stats for container ${containerInfo.Id}: ${parseErr.message}`);
+          }
+        });
+
+        stream.on('error', (streamErr) => {
+          console.error(`[ERROR] Stats stream error for container ${containerInfo.Id}: ${streamErr.message}`);
+        });
+
+        stream.on('close', () => {
+          console.log(`[INFO] Stats stream closed for container ${containerInfo.Id}`);
+        });
       });
     });
   });
@@ -427,17 +460,18 @@ function handleKillTerminal(containerId, peer) {
 function streamContainerStats(containerInfo) {
   const container = docker.getContainer(containerInfo.Id);
 
-  // First, retrieve the container's IP address using inspect
-  container.inspect((inspectErr, data) => {
+  // Use the same logic as listContainers to get the IP address
+  container.inspect((inspectErr, details) => {
+    let ipAddress = 'No IP Assigned'; // Default IP address fallback
+
     if (inspectErr) {
       console.error(`[ERROR] Failed to inspect container ${containerInfo.Id}: ${inspectErr.message}`);
-      return;
+    } else if (details.NetworkSettings && details.NetworkSettings.Networks) {
+      const networks = Object.values(details.NetworkSettings.Networks);
+      if (networks.length > 0 && networks[0].IPAddress) {
+        ipAddress = networks[0].IPAddress; // Retrieve the first network's IP address
+      }
     }
-
-    // Retrieve the IP address from the NetworkSettings
-    const ipAddress = data.NetworkSettings.Networks
-      ? Object.values(data.NetworkSettings.Networks)[0].IPAddress
-      : '-';
 
     // Start streaming container stats
     container.stats({ stream: true }, (statsErr, stream) => {
@@ -450,13 +484,14 @@ function streamContainerStats(containerInfo) {
         try {
           const stats = JSON.parse(data.toString());
           const cpuUsage = calculateCPUPercent(stats);
-          const memoryUsage = stats.memory_stats.usage;
+          const memoryUsage = stats.memory_stats.usage || 0; // Default to 0 if undefined
 
+          // Use the extracted IP address in the stats data
           const statsData = {
             id: containerInfo.Id,
             cpu: cpuUsage,
             memory: memoryUsage,
-            ip: ipAddress, // Use the inspected IP address
+            ip: ipAddress, // Use the IP address retrieved during inspection
           };
 
           // Broadcast stats to all connected peers
@@ -470,6 +505,10 @@ function streamContainerStats(containerInfo) {
 
       stream.on('error', (streamErr) => {
         console.error(`[ERROR] Stats stream error for container ${containerInfo.Id}: ${streamErr.message}`);
+      });
+
+      stream.on('close', () => {
+        console.log(`[INFO] Stats stream closed for container ${containerInfo.Id}`);
       });
     });
   });
