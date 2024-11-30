@@ -468,6 +468,9 @@ function renderContainers(containers) {
       <button class="btn btn-success btn-sm action-start" ${container.State === 'running' ? 'disabled' : ''}>
         <i class="fas fa-play"></i>
       </button>
+      <button class="btn btn-info btn-sm action-restart" ${container.State !== 'running' ? 'disabled' : ''}>
+        <i class="fas fa-redo"></i>
+      </button>
       <button class="btn btn-warning btn-sm action-stop" ${container.State !== 'running' ? 'disabled' : ''}>
         <i class="fas fa-stop"></i>
       </button>
@@ -480,9 +483,7 @@ function renderContainers(containers) {
       <button class="btn btn-secondary btn-sm action-duplicate">
         <i class="fas fa-clone"></i>
       </button>
-      <button class="btn btn-info btn-sm action-restart" ${container.State !== 'running' ? 'disabled' : ''}>
-        <i class="fas fa-redo"></i>
-      </button>
+
     </td>
 `;
     containerList.appendChild(row);
