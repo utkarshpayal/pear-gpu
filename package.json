@@ -6,8 +6,8 @@
     "type": "desktop",
     "gui": {
       "backgroundColor": "#1F2430",
-      "height": "540",
-      "width": "720"
+      "height": "400",
+      "width": "950"
     },
     "links": [
       "http://127.0.0.1",
