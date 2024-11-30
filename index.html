@@ -22,10 +22,9 @@
       color: white;
       overflow: hidden;
     }
-
     .hidden {
-      display: none !important;
-    }
+    display: none !important;
+}
 
     #titlebar {
       -webkit-app-region: drag;
@@ -79,18 +78,14 @@
     }
 
     #content {
-      display: flex;
-      flex-direction: column;
-      /* Keep vertical stacking for child elements */
-      margin-left: 250px;
-      /* Leave space for the sidebar */
-      flex: 1;
-      /* Allow the content to grow */
-      padding: 30px;
-      overflow-y: auto;
-      /* Allow scrolling if content overflows */
-      position: relative;
-    }
+  display: flex;
+  flex-direction: column; /* Keep vertical stacking for child elements */
+  margin-left: 250px; /* Leave space for the sidebar */
+  flex: 1; /* Allow the content to grow */
+  padding: 30px;
+  overflow-y: auto; /* Allow scrolling if content overflows */
+  position: relative;
+}
 
     #sidebar.collapsed~#content {
       margin-left: 50px;
@@ -175,42 +170,18 @@
       cursor: pointer;
     }
 
-    .table-responsive {
-      overflow-x: auto;
-      -webkit-overflow-scrolling: touch;
-      /* Enable smooth scrolling on touch devices */
-    }
-
-    .table th,
-    .table td {
-      white-space: nowrap;
-      /* Prevent table cells from wrapping text */
-    }
-
-    @media (max-width: 768px) {
-
-      .table th,
-      .table td {
-        font-size: 0.9rem;
-        /* Adjust font size for smaller screens */
-        padding: 0.5rem;
-        /* Reduce padding */
-      }
-    }
-
     #status-indicator {
-      display: none;
-      /* Ensure it's hidden by default */
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      align-items: center;
-      justify-content: center;
-      background-color: rgba(0, 0, 0, 0.75);
-      z-index: 1050;
-    }
+  display: none; /* Ensure it's hidden by default */
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(0, 0, 0, 0.75);
+  z-index: 1050;
+}
 
     #status-indicator .spinner-border {
       width: 3rem;
@@ -224,146 +195,40 @@
     }
 
     #welcome-page {
-      display: flex;
-      flex-direction: column;
-      /* Stack child elements vertically */
-      justify-content: center;
-      /* Center content vertically */
-      align-items: center;
-      /* Center content horizontally */
-      text-align: center;
-      /* Center-align text */
-      position: absolute;
-      /* Overlay it over the content area */
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      /* Center it perfectly in the content */
-      max-width: 800px;
-      /* Restrict the width of the welcome page */
-      width: 100%;
-      /* Allow it to scale */
-      padding: 20px;
-      background-color: transparent;
-      /* Match the theme */
-    }
+  display: flex;
+  flex-direction: column; /* Stack child elements vertically */
+  justify-content: center; /* Center content vertically */
+  align-items: center; /* Center content horizontally */
+  text-align: center; /* Center-align text */
+  position: absolute; /* Overlay it over the content area */
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%); /* Center it perfectly in the content */
+  max-width: 800px; /* Restrict the width of the welcome page */
+  width: 100%; /* Allow it to scale */
+  padding: 20px;
+  background-color: transparent; /* Match the theme */
+}
 
-    #welcome-page.hidden {
-      display: none !important;
-      /* Completely hide when not needed */
-    }
+#welcome-page.hidden {
+  display: none !important; /* Completely hide when not needed */
+}
 
-    #dashboard {
-      display: flex;
-      /* Use flex layout for content within the dashboard */
-      flex-direction: column;
-      /* Stack elements vertically */
-      flex: 1;
-      /* Ensure it uses all available space */
-      width: 100%;
-      /* Take up the full width of the content area */
-      padding: 0;
-      /* Remove extra padding */
-      overflow-y: auto;
-      /* Allow vertical scrolling if needed */
-      position: relative;
-      /* Prevent overlap with other elements */
-    }
+#dashboard {
+  display: flex; /* Use flex layout for content within the dashboard */
+  flex-direction: column; /* Stack elements vertically */
+  flex: 1; /* Ensure it uses all available space */
+  width: 100%; /* Take up the full width of the content area */
+  padding: 0; /* Remove extra padding */
+  overflow-y: auto; /* Allow vertical scrolling if needed */
+  position: relative; /* Prevent overlap with other elements */
+}
 
-    #dashboard.hidden {
-      display: none !important;
-      /* Hide the dashboard completely when not needed */
-    }
-
-    #alert-container {
-      position: fixed;
-      bottom: 20px;
-      right: 20px;
-      z-index: 1055;
-      /* Ensure it overlays other elements */
-      display: flex;
-      flex-direction: column-reverse;
-      /* Stack alerts upwards */
-      gap: 10px;
-      /* Add space between alerts */
-    }
-
-    .alert {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      max-width: 80%;
-      /* Ensure the alert doesn't stretch too wide */
-      padding: 12px 20px;
-      /* Adjust padding for a more balanced look */
-      background-color: #2b2b2b;
-      /* Slightly lighter background for better contrast */
-      color: #e0e0e0;
-      /* Softer white text for readability */
-      border-radius: 6px;
-      /* Round corners for a modern look */
-      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
-      /* Add subtle shadow for depth */
-      font-family: Arial, sans-serif;
-      font-size: 14px;
-      /* Adjust font size for readability */
-      animation: fadeIn 0.3s ease-out, fadeOut 4.5s ease-in forwards;
-      white-space: nowrap;
-      /* Prevent text wrapping */
-      overflow: hidden;
-      /* Hide overflow for long text */
-      text-overflow: ellipsis;
-      /* Add ellipsis for overflowed text */
-    }
-
-    .alert.success {
-      border-left: 6px solid #28a745;
-      /* Green border for success */
-    }
-
-    .alert.danger {
-      border-left: 6px solid #dc3545;
-      /* Red border for danger */
-    }
-
-    .alert .close-btn {
-      background: none;
-      border: none;
-      color: #e0e0e0;
-      /* Use the same text color for consistency */
-      font-size: 16px;
-      cursor: pointer;
-      margin-left: 15px;
-      /* Space between text and close button */
-    }
-
-    @keyframes fadeIn {
-      from {
-        opacity: 0;
-        transform: translateY(10px);
-      }
-
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
-    }
-
-    @keyframes fadeOut {
-      0% {
-        opacity: 1;
-      }
-
-      90% {
-        opacity: 0.3;
-      }
-
-      100% {
-        opacity: 0;
-        transform: translateY(10px);
-      }
-    }
+#dashboard.hidden {
+  display: none !important; /* Hide the dashboard completely when not needed */
+}
   </style>
+
 </head>
 
 <body>

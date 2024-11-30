@@ -191,7 +191,7 @@ addConnectionForm.addEventListener('submit', (e) => {
 // Function to add a new connection
 function addConnection(topicHex) {
   console.log(`[DEBUG] Adding connection with topic: ${topicHex}`);
-  
+
   if (Object.keys(connections).length === 0) {
     console.log('[DEBUG] Hiding welcome page after first connection');
     hideWelcomePage(); // Hide the welcome page when the first connection is added
@@ -490,7 +490,7 @@ function renderContainers(containers) {
 
     // Add event listeners for action buttons
     addActionListeners(row, container);
-            // Add event listener for duplicate button
+    // Add event listener for duplicate button
     const duplicateBtn = row.querySelector('.action-duplicate');
     duplicateBtn.addEventListener('click', () => openDuplicateModal(container));
 
@@ -508,15 +508,15 @@ function addActionListeners(row, container) {
   startBtn.addEventListener('click', async () => {
     showStatusIndicator(`Starting container "${container.Names[0]}"...`);
     sendCommand('startContainer', { id: container.Id });
-  
+
     const expectedMessageFragment = `Container ${container.Id} started`;
-  
+
     try {
       const response = await waitForPeerResponse(expectedMessageFragment);
       console.log('[DEBUG] Start container response:', response);
-  
+
       showAlert('success', response.message);
-  
+
       // Refresh the container list to update states
       sendCommand('listContainers');
     } catch (error) {
@@ -531,15 +531,15 @@ function addActionListeners(row, container) {
   stopBtn.addEventListener('click', async () => {
     showStatusIndicator(`Stopping container "${container.Names[0]}"...`);
     sendCommand('stopContainer', { id: container.Id });
-  
+
     const expectedMessageFragment = `Container ${container.Id} stopped`;
-  
+
     try {
       const response = await waitForPeerResponse(expectedMessageFragment);
       console.log('[DEBUG] Stop container response:', response);
-  
+
       showAlert('success', response.message);
-  
+
       // Refresh the container list to update states
       sendCommand('listContainers');
     } catch (error) {
@@ -553,41 +553,41 @@ function addActionListeners(row, container) {
 
 
   // Restart Button
-restartBtn.addEventListener('click', async () => {
-  showStatusIndicator(`Restarting container "${container.Names[0]}"...`);
-  sendCommand('restartContainer', { id: container.Id });
+  restartBtn.addEventListener('click', async () => {
+    showStatusIndicator(`Restarting container "${container.Names[0]}"...`);
+    sendCommand('restartContainer', { id: container.Id });
 
-  const expectedMessageFragment = `Container ${container.Id} restarted`;
+    const expectedMessageFragment = `Container ${container.Id} restarted`;
 
-  try {
-    const response = await waitForPeerResponse(expectedMessageFragment);
-    console.log('[DEBUG] Restart container response:', response);
+    try {
+      const response = await waitForPeerResponse(expectedMessageFragment);
+      console.log('[DEBUG] Restart container response:', response);
 
-    showAlert('success', response.message);
+      showAlert('success', response.message);
 
-    // Refresh the container list to update states
-    sendCommand('listContainers');
-  } catch (error) {
-    console.error('[ERROR] Failed to restart container:', error.message);
-    showAlert('danger', error.message || 'Failed to restart container.');
-  } finally {
-    console.log('[DEBUG] Hiding status indicator in restartBtn finally block');
-    hideStatusIndicator();
-  }
-});
-  
+      // Refresh the container list to update states
+      sendCommand('listContainers');
+    } catch (error) {
+      console.error('[ERROR] Failed to restart container:', error.message);
+      showAlert('danger', error.message || 'Failed to restart container.');
+    } finally {
+      console.log('[DEBUG] Hiding status indicator in restartBtn finally block');
+      hideStatusIndicator();
+    }
+  });
+
 
   // Remove Button
   removeBtn.addEventListener('click', async () => {
     const deleteModal = new bootstrap.Modal(document.getElementById('deleteModal'));
     deleteModal.show();
-  
+
     const confirmDeleteBtn = document.getElementById('confirm-delete-btn');
     confirmDeleteBtn.onclick = async () => {
       deleteModal.hide();
-  
+
       showStatusIndicator(`Deleting container "${container.Names[0]}"...`);
-  
+
       // Check if the container has active terminals
       if (window.openTerminals[container.Id]) {
         console.log(`[INFO] Closing active terminals for container: ${container.Id}`);
@@ -600,24 +600,29 @@ restartBtn.addEventListener('click', async () => {
         });
         delete window.openTerminals[container.Id];
       }
-  
+
       // Hide the terminal modal if it is active
       const terminalModal = document.getElementById('terminal-modal');
       if (terminalModal.style.display === 'flex') {
         console.log(`[INFO] Hiding terminal modal for container: ${container.Id}`);
         terminalModal.style.display = 'none';
       }
-  
+
+
+      terminalModal.addEventListener('shown.bs.modal', () => {
+        terminal.focus();
+      });
+
       sendCommand('removeContainer', { id: container.Id });
-  
+
       const expectedMessageFragment = `Container ${container.Id} removed`;
-  
+
       try {
         const response = await waitForPeerResponse(expectedMessageFragment);
         console.log('[DEBUG] Remove container response:', response);
-  
+
         showAlert('success', response.message);
-  
+
         // Refresh the container list to update states
         sendCommand('listContainers');
       } catch (error) {
@@ -629,7 +634,7 @@ restartBtn.addEventListener('click', async () => {
       }
     };
   });
-  
+
 
   terminalBtn.addEventListener('click', () => {
     console.log(`[DEBUG] Opening terminal for container ID: ${container.Id}`);
@@ -675,7 +680,7 @@ function openDuplicateModal(container) {
   console.log(`[INFO] Opening Duplicate Modal for container: ${container.Id}`);
 
   showStatusIndicator('Fetching container configuration...');
-  
+
   // Send a command to inspect the container
   sendCommand('inspectContainer', { id: container.Id });
 
