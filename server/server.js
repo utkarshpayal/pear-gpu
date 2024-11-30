@@ -345,16 +345,16 @@ docker.listContainers({ all: true }, async (err, containers) => {
               peer.write(JSON.stringify({ type: 'stats', data: statsData }));
             }
           } catch (parseErr) {
-            console.error(`[ERROR] Failed to parse stats for container ${containerInfo.Id}: ${parseErr.message}`);
+            // console.error(`[ERROR] Failed to parse stats for container ${containerInfo.Id}: ${parseErr.message}`);
           }
         });
 
         stream.on('error', (streamErr) => {
-          console.error(`[ERROR] Stats stream error for container ${containerInfo.Id}: ${streamErr.message}`);
+          // console.error(`[ERROR] Stats stream error for container ${containerInfo.Id}: ${streamErr.message}`);
         });
 
         stream.on('close', () => {
-          console.log(`[INFO] Stats stream closed for container ${containerInfo.Id}`);
+          // console.log(`[INFO] Stats stream closed for container ${containerInfo.Id}`);
         });
       });
     });
