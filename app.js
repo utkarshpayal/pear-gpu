@@ -143,12 +143,12 @@ document.addEventListener('DOMContentLoaded', () => {
   // Restore saved connections
   Object.keys(savedConnections).forEach((topicId) => {
     let topicHex = savedConnections[topicId].topic;
-  
+
     // Ensure topicHex is a string
     if (typeof topicHex !== 'string') {
       topicHex = b4a.toString(topicHex, 'hex');
     }
-  
+
     addConnection(topicHex);
   });
 
@@ -233,6 +233,13 @@ function handlePeerData(data, topicId, peer) {
     const response = JSON.parse(data.toString());
     console.log(`[DEBUG] Received data from peer (topic: ${topicId}): ${JSON.stringify(response)}`);
 
+    // Ensure the data is for the active connection
+    if (!connections[topicId] || peer !== window.activePeer) {
+      console.warn(`[WARN] Ignoring data from inactive peer or topic: ${topicId}`);
+      return;
+    }
+
+    // Process the response based on its type
     if (response.error) {
       console.error(`[ERROR] Server error: ${response.error}`);
       showAlert('danger', response.error);
@@ -241,12 +248,10 @@ function handlePeerData(data, topicId, peer) {
     }
 
     if (response.type === 'containers') {
-      if (window.activePeer === peer) {
-        renderContainers(response.data);
-      }
+      renderContainers(response.data, topicId); // Scope containers to this topic
     } else if (response.type === 'stats') {
-      console.log(`[DEBUG] Updating stats for container: ${response.data.id}`);
-      updateContainerStats(response.data); // Call the stats update function
+      response.data.topicId = topicId; // Attach the topicId to the stats
+      updateContainerStats(response.data); // Update stats for specific containers
     } else if (response.type === 'terminalOutput') {
       appendTerminalOutput(response.data, response.containerId, response.encoding);
     } else if (response.type === 'containerConfig') {
@@ -264,6 +269,9 @@ function handlePeerData(data, topicId, peer) {
     showAlert('danger', 'Failed to process peer data.');
   }
 }
+
+
+
 
 
 // Add a new connection
@@ -369,66 +377,60 @@ function disconnectConnection(topicId, connectionItem) {
     return;
   }
 
-  // Close and clean up open terminals associated with this connection
+  // Clean up terminals
   if (window.openTerminals[topicId]) {
     console.log(`[INFO] Closing terminals for topic: ${topicId}`);
-    window.openTerminals[topicId].forEach((containerId) => {
+    window.openTerminals[topicId].forEach((terminalId) => {
       try {
-        cleanUpTerminal(containerId); // Use the terminal.js cleanup logic
+        cleanUpTerminal(terminalId);
       } catch (err) {
-        console.error(`[ERROR] Failed to clean up terminal for container ${containerId}: ${err.message}`);
+        console.error(`[ERROR] Failed to clean up terminal ${terminalId}: ${err.message}`);
       }
     });
     delete window.openTerminals[topicId];
   }
 
-  // Hide the terminal modal if it's active
-  const terminalModal = document.getElementById('terminal-modal');
-  if (terminalModal && terminalModal.style.display === 'flex') {
-    console.log(`[INFO] Hiding terminal modal for disconnected topic: ${topicId}`);
-    terminalModal.style.display = 'none';
-  }
-
-  // Disconnect the peer and destroy the swarm
+  // Destroy the peer and swarm
   if (connection.peer) {
     connection.peer.destroy();
-    connection.peer = null;
   }
   if (connection.swarm) {
     connection.swarm.destroy();
-    connection.swarm = null;
   }
 
-  // Remove the connection from the global connections object
+  // Remove from global connections
   delete connections[topicId];
 
-  // Remove the connection item from the list
+  // Remove the connection item from the UI
   if (connectionItem) {
     connectionList.removeChild(connectionItem);
   }
 
-  console.log(`[INFO] Disconnected and removed connection: ${topicId}`);
-
-  // Reset active peer if it was the disconnected connection
+  // Reset the connection title if this was the active peer
   if (window.activePeer === connection.peer) {
     window.activePeer = null;
-    connectionTitle.textContent = 'Choose a Connection'; // Reset title
-    dashboard.classList.add('hidden');
-    containerList.innerHTML = ''; // Clear the container list
+
+    const connectionTitle = document.getElementById('connection-title');
+    if (connectionTitle) {
+      connectionTitle.textContent = 'Choose a Connection'; // Reset the title
+    }
+
+    const dashboard = document.getElementById('dashboard');
+    if (dashboard) {
+      dashboard.classList.add('hidden');
+    }
+
+    resetContainerList(); // Clear containers
   }
 
-  // Check if no connections remain, and show the welcome page
+  // Show welcome page if no connections remain
   if (Object.keys(connections).length === 0) {
-    console.log('[DEBUG] All connections removed. Showing welcome page.');
     showWelcomePage();
   }
 
-  // Ensure the container list is cleared regardless of the active connection
-  resetContainerList();
-
-  // Refresh the connections view
-  resetConnectionsView();
+  console.log(`[INFO] Disconnected and removed connection: ${topicId}`);
 }
+
 
 // Function to reset the container list
 function resetContainerList() {
@@ -480,31 +482,21 @@ function updateConnectionStatus(topicId, isConnected) {
 // Switch between connections
 function switchConnection(topicId) {
   const connection = connections[topicId];
-  const connectionTitle = document.getElementById('connection-title');
 
   if (!connection || !connection.peer) {
     console.error('[ERROR] No connection found or no active peer.');
-
-    // Update title if element exists
-    if (connectionTitle) {
-      connectionTitle.textContent = '󠀠';
-      connectionTitle.classList.add('hidden');
-    }
-
-    showWelcomePage(); // Show welcome page
+    showWelcomePage();
     return;
   }
 
-  // Set active peer and update UI
+  // Update the active peer
   window.activePeer = connection.peer;
 
-  if (connectionTitle) {
-    connectionTitle.textContent = `Connection: ${topicId}`;
-    connectionTitle.classList.remove('hidden');
-  }
+  // Clear container list before loading new data
+  resetContainerList();
 
-  hideWelcomePage(); // Hide the welcome page
-  sendCommand('listContainers'); // Request container list
+  console.log(`[INFO] Switched to connection: ${topicId}`);
+  sendCommand('listContainers'); // Request containers for the new connection
 }
 
 // Attach switchConnection to the global window object
@@ -525,57 +517,61 @@ function sendCommand(command, args = {}) {
 window.sendCommand = sendCommand;
 
 // Render the container list
-function renderContainers(containers) {
-  console.log(`[INFO] Rendering ${containers.length} containers`);
+function renderContainers(containers, topicId) {
+  if (!window.activePeer || !connections[topicId] || window.activePeer !== connections[topicId].peer) {
+    console.warn('[WARN] Active peer mismatch or invalid connection. Skipping container rendering.');
+    return;
+  }
+
+  console.log(`[INFO] Rendering ${containers.length} containers for topic: ${topicId}`);
   containerList.innerHTML = ''; // Clear the current list
 
   containers.forEach((container) => {
-    const name = container.Names[0].replace(/^\//, ''); // Remove leading slash
-    const image = container.Image;
+    const name = container.Names[0]?.replace(/^\//, '') || 'Unknown'; // Avoid undefined Names
+    const image = container.Image || '-';
     const containerId = container.Id;
-    const ipAddress = container.ipAddress || '-'; // Use the IP address field
+    const ipAddress = container.ipAddress || 'No IP Assigned';
 
     const row = document.createElement('tr');
     row.dataset.containerId = containerId; // Store container ID for reference
     row.innerHTML = `
-    <td>${name}</td>
-    <td>${image}</td>
-    <td>${container.State}</td>
-    <td class="cpu">0</td>
-    <td class="memory">0</td>
-    <td class="ip-address">${ipAddress}</td>
-    <td>
-      <button class="btn btn-success btn-sm action-start" ${container.State === 'running' ? 'disabled' : ''}>
-        <i class="fas fa-play"></i>
-      </button>
-      <button class="btn btn-info btn-sm action-restart" ${container.State !== 'running' ? 'disabled' : ''}>
-        <i class="fas fa-redo"></i>
-      </button>
-      <button class="btn btn-warning btn-sm action-stop" ${container.State !== 'running' ? 'disabled' : ''}>
-        <i class="fas fa-stop"></i>
-      </button>
-      <button class="btn btn-danger btn-sm action-remove">
-        <i class="fas fa-trash"></i>
-      </button>
-      <button class="btn btn-primary btn-sm action-terminal" ${container.State !== 'running' ? 'disabled' : ''}>
-        <i class="fas fa-terminal"></i>
-      </button>
-      <button class="btn btn-secondary btn-sm action-duplicate">
-        <i class="fas fa-clone"></i>
-      </button>
-
-    </td>
-`;
+      <td>${name}</td>
+      <td>${image}</td>
+      <td>${container.State || 'Unknown'}</td>
+      <td class="cpu">0</td>
+      <td class="memory">0</td>
+      <td class="ip-address">${ipAddress}</td>
+      <td>
+        <button class="btn btn-success btn-sm action-start" ${container.State === 'running' ? 'disabled' : ''}>
+          <i class="fas fa-play"></i>
+        </button>
+        <button class="btn btn-info btn-sm action-restart" ${container.State !== 'running' ? 'disabled' : ''}>
+          <i class="fas fa-redo"></i>
+        </button>
+        <button class="btn btn-warning btn-sm action-stop" ${container.State !== 'running' ? 'disabled' : ''}>
+          <i class="fas fa-stop"></i>
+        </button>
+        <button class="btn btn-danger btn-sm action-remove">
+          <i class="fas fa-trash"></i>
+        </button>
+        <button class="btn btn-primary btn-sm action-terminal" ${container.State !== 'running' ? 'disabled' : ''}>
+          <i class="fas fa-terminal"></i>
+        </button>
+        <button class="btn btn-secondary btn-sm action-duplicate">
+          <i class="fas fa-clone"></i>
+        </button>
+      </td>
+    `;
     containerList.appendChild(row);
-
-    // Add event listeners for action buttons
-    addActionListeners(row, container);
     // Add event listener for duplicate button
     const duplicateBtn = row.querySelector('.action-duplicate');
     duplicateBtn.addEventListener('click', () => openDuplicateModal(container));
-
+    // Add event listeners for action buttons
+    addActionListeners(row, container);
   });
 }
+
+
 
 function addActionListeners(row, container) {
   const startBtn = row.querySelector('.action-start');
@@ -730,30 +726,28 @@ function addActionListeners(row, container) {
 
 // Function to update container statistics
 function updateContainerStats(stats) {
-  console.log(`[DEBUG] Updating stats for container ID: ${stats.id}`);
-  let row = containerList.querySelector(`tr[data-container-id="${stats.id}"]`);
+  console.log(`[DEBUG] Updating stats for container ID: ${stats.id}, Topic ID: ${stats.topicId}`);
 
-  if (!row) {
-    console.warn(`[WARN] No row found for container ID: ${stats.id}. Adding a placeholder.`);
-    // Create a placeholder row if it doesn't exist
-    row = document.createElement('tr');
-    row.dataset.containerId = stats.id;
-    row.innerHTML = `
-        <td>Unknown</td>
-        <td>-</td>
-        <td>-</td>
-        <td class="cpu">0</td>
-        <td class="memory">0</td>
-        <td class="ip-address">-</td>
-        <td>-</td>
-      `;
-    containerList.appendChild(row);
+  // Ensure stats belong to the active connection
+  if (!window.activePeer || !connections[stats.topicId] || window.activePeer !== connections[stats.topicId].peer) {
+    console.warn(`[WARN] Stats received for inactive or unknown connection. Skipping.`);
+    return;
   }
 
-  row.querySelector('.cpu').textContent = stats.cpu.toFixed(2);
-  row.querySelector('.memory').textContent = (stats.memory / (1024 * 1024)).toFixed(2);
-  row.querySelector('.ip-address').textContent = stats.ip || '-';
+  // Find the row for the container by its ID
+  const row = containerList.querySelector(`tr[data-container-id="${stats.id}"]`);
+  if (!row) {
+    console.warn(`[WARN] No matching row for container ID: ${stats.id}. Skipping stats update.`);
+    return;
+  }
+
+  // Update the container statistics in the UI
+  row.querySelector('.cpu').textContent = stats.cpu.toFixed(2) || '0.00';
+  row.querySelector('.memory').textContent = (stats.memory / (1024 * 1024)).toFixed(2) || '0.00';
+  row.querySelector('.ip-address').textContent = stats.ip || 'No IP Assigned';
 }
+
+
 
 // Function to open the Duplicate Modal with container configurations
 function openDuplicateModal(container) {
