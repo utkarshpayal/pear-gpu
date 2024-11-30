@@ -21,8 +21,8 @@ window.openTerminals = {};
 let activePeer = null;
 window.activePeer = null; // Expose to other modules
 hideStatusIndicator();
-let statsInterval = null; // Global variable to hold the interval
-
+let statsInterval = null;
+let lastStatsUpdate = Date.now();
 function stopStatsInterval() {
   if (statsInterval) {
     clearInterval(statsInterval);
@@ -31,21 +31,31 @@ function stopStatsInterval() {
   }
 }
 
+
 function startStatsInterval() {
-  // Clear any existing interval
   if (statsInterval) {
     clearInterval(statsInterval);
   }
 
-  // Start a new interval to request stats every second
   statsInterval = setInterval(() => {
     if (window.activePeer) {
-      console.log('[INFO] Requesting container stats...');
-      sendCommand('stats', {}); // Adjust the command if specific arguments are needed
+      const now = Date.now();
+      if (now - lastStatsUpdate >= 500) { // Ensure at least 500ms between updates
+        sendCommand('stats', {}); // Adjust command if necessary
+        lastStatsUpdate = now;
+      }
     } else {
       console.warn('[WARN] No active peer; skipping stats request.');
     }
-  }, 1000); // 1 second interval
+  }, 100); // Poll every 100ms for better reactivity
+}
+
+let smoothedStats = { cpu: 0, memory: 0 };
+
+function smoothStats(newStats, smoothingFactor = 0.2) {
+  smoothedStats.cpu = smoothedStats.cpu * (1 - smoothingFactor) + newStats.cpu * smoothingFactor;
+  smoothedStats.memory = smoothedStats.memory * (1 - smoothingFactor) + newStats.memory * smoothingFactor;
+  return smoothedStats;
 }
 
 function refreshContainerStats() {
@@ -346,6 +356,7 @@ function addConnection(topicHex) {
     e.stopPropagation();
     disconnectConnection(topicId, connectionItem);
   });
+  refreshContainerStats();
 
   connectionList.appendChild(connectionItem);
 
@@ -769,28 +780,32 @@ function addActionListeners(row, container) {
 }
 
 
-// Function to update container statistics
-function updateContainerStats(stats) {
-  console.log(`[DEBUG] Updating stats for container ID: ${stats.id}, Topic ID: ${stats.topicId}`);
+function updateStatsUI(row, stats) {
+  requestIdleCallback(() => {
+    row.querySelector('.cpu').textContent = stats.cpu.toFixed(2) || '0.00';
+    row.querySelector('.memory').textContent = (stats.memory / (1024 * 1024)).toFixed(2) || '0.00';
+    row.querySelector('.ip-address').textContent = stats.ip || 'No IP Assigned';
+  });
+}
 
-  // Ensure stats belong to the active connection
+function updateContainerStats(stats) {
+  // console.log(`[DEBUG] Updating stats for container ID: ${stats.id}, Topic ID: ${stats.topicId}`);
+
   if (!window.activePeer || !connections[stats.topicId] || window.activePeer !== connections[stats.topicId].peer) {
-    console.warn(`[WARN] Stats received for inactive or unknown connection. Skipping.`);
+    // console.warn(`[WARN] Stats received for inactive or unknown connection. Skipping.`);
     return;
   }
 
-  // Find the row for the container by its ID
   const row = containerList.querySelector(`tr[data-container-id="${stats.id}"]`);
   if (!row) {
-    console.warn(`[WARN] No matching row for container ID: ${stats.id}. Skipping stats update.`);
+    // console.warn(`[WARN] No matching row for container ID: ${stats.id}. Skipping stats update.`);
     return;
   }
 
-  // Update the container statistics in the UI
-  row.querySelector('.cpu').textContent = stats.cpu.toFixed(2) || '0.00';
-  row.querySelector('.memory').textContent = (stats.memory / (1024 * 1024)).toFixed(2) || '0.00';
-  row.querySelector('.ip-address').textContent = stats.ip || 'No IP Assigned';
+  // Use updateStatsUI for cleaner and optimized DOM updates
+  updateStatsUI(row, stats);
 }
+
 
 
 
