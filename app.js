@@ -490,6 +490,9 @@ function disconnectConnection(topicId, connectionItem) {
   // Remove from global connections
   delete connections[topicId];
 
+  // Save the updated connections to cookies
+  saveConnections();
+
   // Remove the connection item from the UI
   if (connectionItem) {
     connectionList.removeChild(connectionItem);
@@ -854,7 +857,6 @@ function updateContainerStats(stats) {
 }
 
 function updateStatsUI(row, stats) {
-  console.log("HAHHAHAHAHAHHAHA " + JSON.stringify(stats, null, 2));
   requestIdleCallback(() => {
     row.querySelector('.cpu').textContent = stats.cpu.toFixed(2) || '0.00';
     row.querySelector('.memory').textContent = (stats.memory / (1024 * 1024)).toFixed(2) || '0.00';
