@@ -105,26 +105,30 @@ function hideStatusIndicator() {
 // Show Alert
 function showAlert(type, message) {
   const alertContainer = document.getElementById('alert-container');
+
+  // Create alert element
   const alert = document.createElement('div');
-  alert.className = `alert alert-${type} alert-dismissible fade show`;
-  alert.role = 'alert';
+  alert.className = `alert ${type}`;
   alert.innerHTML = `
-    ${message}
-    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    <span>${message}</span>
+    <button class="close-btn" aria-label="Close">&times;</button>
   `;
+
+  // Add close button functionality
+  const closeButton = alert.querySelector('.close-btn');
+  closeButton.addEventListener('click', () => {
+    alert.remove(); // Remove alert on close
+  });
+
+  // Append alert to container
   alertContainer.appendChild(alert);
 
-  // Automatically hide the status indicator for errors or success
-  if (type === 'danger' || type === 'success') {
-    hideStatusIndicator();
-  }
-
-  // Automatically remove the alert after 5 seconds
+  // Automatically remove alert after 5 seconds
   setTimeout(() => {
-    alert.classList.remove('show');
-    setTimeout(() => alert.remove(), 300); // Bootstrap's fade-out transition duration
+    alert.remove();
   }, 5000);
 }
+
 
 // Collapse Sidebar Functionality
 const collapseSidebarBtn = document.getElementById('collapse-sidebar-btn');
@@ -454,30 +458,33 @@ function renderContainers(containers) {
     const row = document.createElement('tr');
     row.dataset.containerId = containerId; // Store container ID for reference
     row.innerHTML = `
-        <td>${name}</td>
-        <td>${image}</td>
-        <td>${container.State}</td>
-        <td class="cpu">0</td>
-        <td class="memory">0</td>
-        <td class="ip-address">${ipAddress}</td>
-        <td>
-          <button class="btn btn-success btn-sm action-start" ${container.State === 'running' ? 'disabled' : ''}>
-            <i class="fas fa-play"></i>
-          </button>
-          <button class="btn btn-warning btn-sm action-stop" ${container.State !== 'running' ? 'disabled' : ''}>
-            <i class="fas fa-stop"></i>
-          </button>
-          <button class="btn btn-danger btn-sm action-remove">
-            <i class="fas fa-trash"></i>
-          </button>
-          <button class="btn btn-primary btn-sm action-terminal" ${container.State !== 'running' ? 'disabled' : ''}>
-            <i class="fas fa-terminal"></i>
-          </button>
-          <button class="btn btn-secondary btn-sm action-duplicate">
-            <i class="fas fa-clone"></i>
-          </button>
-        </td>
-    `;
+    <td>${name}</td>
+    <td>${image}</td>
+    <td>${container.State}</td>
+    <td class="cpu">0</td>
+    <td class="memory">0</td>
+    <td class="ip-address">${ipAddress}</td>
+    <td>
+      <button class="btn btn-success btn-sm action-start" ${container.State === 'running' ? 'disabled' : ''}>
+        <i class="fas fa-play"></i>
+      </button>
+      <button class="btn btn-warning btn-sm action-stop" ${container.State !== 'running' ? 'disabled' : ''}>
+        <i class="fas fa-stop"></i>
+      </button>
+      <button class="btn btn-danger btn-sm action-remove">
+        <i class="fas fa-trash"></i>
+      </button>
+      <button class="btn btn-primary btn-sm action-terminal" ${container.State !== 'running' ? 'disabled' : ''}>
+        <i class="fas fa-terminal"></i>
+      </button>
+      <button class="btn btn-secondary btn-sm action-duplicate">
+        <i class="fas fa-clone"></i>
+      </button>
+      <button class="btn btn-info btn-sm action-restart" ${container.State !== 'running' ? 'disabled' : ''}>
+        <i class="fas fa-redo"></i>
+      </button>
+    </td>
+`;
     containerList.appendChild(row);
 
     // Add event listeners for action buttons
@@ -494,6 +501,7 @@ function addActionListeners(row, container) {
   const stopBtn = row.querySelector('.action-stop');
   const removeBtn = row.querySelector('.action-remove');
   const terminalBtn = row.querySelector('.action-terminal');
+  const restartBtn = row.querySelector('.action-restart');
 
   // Start Button
   startBtn.addEventListener('click', async () => {
@@ -541,6 +549,31 @@ function addActionListeners(row, container) {
       hideStatusIndicator();
     }
   });
+
+
+  // Restart Button
+restartBtn.addEventListener('click', async () => {
+  showStatusIndicator(`Restarting container "${container.Names[0]}"...`);
+  sendCommand('restartContainer', { id: container.Id });
+
+  const expectedMessageFragment = `Container ${container.Id} restarted`;
+
+  try {
+    const response = await waitForPeerResponse(expectedMessageFragment);
+    console.log('[DEBUG] Restart container response:', response);
+
+    showAlert('success', response.message);
+
+    // Refresh the container list to update states
+    sendCommand('listContainers');
+  } catch (error) {
+    console.error('[ERROR] Failed to restart container:', error.message);
+    showAlert('danger', error.message || 'Failed to restart container.');
+  } finally {
+    console.log('[DEBUG] Hiding status indicator in restartBtn finally block');
+    hideStatusIndicator();
+  }
+});
   
 
   // Remove Button

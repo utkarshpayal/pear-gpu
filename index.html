@@ -227,6 +227,74 @@
 #dashboard.hidden {
   display: none !important; /* Hide the dashboard completely when not needed */
 }
+#alert-container {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 1055; /* Ensure it overlays other elements */
+  display: flex;
+  flex-direction: column-reverse; /* Stack alerts upwards */
+  gap: 10px; /* Add space between alerts */
+}
+
+.alert {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  max-width: 80%; /* Ensure the alert doesn't stretch too wide */
+  padding: 12px 20px; /* Adjust padding for a more balanced look */
+  background-color: #2b2b2b; /* Slightly lighter background for better contrast */
+  color: #e0e0e0; /* Softer white text for readability */
+  border-radius: 6px; /* Round corners for a modern look */
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5); /* Add subtle shadow for depth */
+  font-family: Arial, sans-serif;
+  font-size: 14px; /* Adjust font size for readability */
+  animation: fadeIn 0.3s ease-out, fadeOut 4.5s ease-in forwards;
+  white-space: nowrap; /* Prevent text wrapping */
+  overflow: hidden; /* Hide overflow for long text */
+  text-overflow: ellipsis; /* Add ellipsis for overflowed text */
+}
+
+.alert.success {
+  border-left: 6px solid #28a745; /* Green border for success */
+}
+
+.alert.danger {
+  border-left: 6px solid #dc3545; /* Red border for danger */
+}
+
+.alert .close-btn {
+  background: none;
+  border: none;
+  color: #e0e0e0; /* Use the same text color for consistency */
+  font-size: 16px;
+  cursor: pointer;
+  margin-left: 15px; /* Space between text and close button */
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeOut {
+  0% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 0.3;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
   </style>
 </head>
 

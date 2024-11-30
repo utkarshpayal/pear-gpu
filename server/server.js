@@ -60,12 +60,12 @@ swarm.on('connection', (peer) => {
           console.log('[INFO] Handling \'listContainers\' command');
           try {
             const containers = await docker.listContainers({ all: true });
-        
+
             const detailedContainers = await Promise.all(
               containers.map(async (container) => {
                 try {
                   const details = await docker.getContainer(container.Id).inspect();
-        
+
                   // Safely access the IP address
                   let ipAddress = 'No IP Assigned';
                   if (details.NetworkSettings && details.NetworkSettings.Networks) {
@@ -74,7 +74,7 @@ swarm.on('connection', (peer) => {
                       ipAddress = networks[0].IPAddress;
                     }
                   }
-        
+
                   return { ...container, ipAddress }; // Add IP address to container data
                 } catch (error) {
                   console.error(`[ERROR] Failed to inspect container ${container.Id}: ${error.message}`);
@@ -82,14 +82,14 @@ swarm.on('connection', (peer) => {
                 }
               })
             );
-        
+
             response = { type: 'containers', data: detailedContainers };
           } catch (error) {
             console.error(`[ERROR] Failed to list containers: ${error.message}`);
             response = { error: 'Failed to list containers' };
           }
           break;
-        
+
         case 'inspectContainer':
           console.log(`[INFO] Handling 'inspectContainer' command for container: ${parsedData.args.id}`);
           const container = docker.getContainer(parsedData.args.id);
@@ -116,6 +116,12 @@ swarm.on('connection', (peer) => {
           console.log(`[INFO] Handling 'stopContainer' command for container: ${parsedData.args.id}`);
           await docker.getContainer(parsedData.args.id).stop();
           response = { success: true, message: `Container ${parsedData.args.id} stopped` };
+          break;
+
+        case 'restartContainer':
+          console.log(`[INFO] Handling 'restartContainer' command for container: ${parsedData.args.id}`);
+          await docker.getContainer(parsedData.args.id).restart();
+          response = { success: true, message: `Container ${parsedData.args.id} restarted` };
           break;
 
         case 'removeContainer':
