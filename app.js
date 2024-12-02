@@ -380,14 +380,31 @@ function addConnection(topicHex) {
   connectionItem.className = 'list-group-item d-flex align-items-center justify-content-between';
   connectionItem.dataset.topicId = topicId;
   connectionItem.innerHTML = `
-      <span>
-        <span class="connection-status status-disconnected"></span>${topicId}
-      </span>
-      <button class="btn btn-sm btn-danger disconnect-btn">
-        <i class="fas fa-plug"></i>
-      </button>
-  `;
+  <span>
+    <span class="connection-status status-disconnected"></span>${topicId}
+  </span>
+  <div class="btn-group">
+    <button class="btn btn-sm btn-primary docker-terminal-btn">
+      <i class="fas fa-terminal"></i>
+    </button>
+    <button class="btn btn-sm btn-danger disconnect-btn">
+      <i class="fas fa-plug"></i>
+    </button>
+  </div>
+`;
 
+// Add Docker Terminal button event listener
+connectionItem.querySelector('.docker-terminal-btn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  const connection = connections[topicId];
+  if (connection && connection.peer) {
+    import('./dockerTerminal.js').then(({ startDockerTerminal }) => {
+      startDockerTerminal(topicId, connection.peer);
+    });
+  } else {
+    console.error('[ERROR] No active peer for Docker CLI terminal.');
+  }
+})
   connectionItem.querySelector('span').addEventListener('click', () => switchConnection(topicId));
   connectionItem.querySelector('.disconnect-btn').addEventListener('click', (e) => {
     e.stopPropagation();

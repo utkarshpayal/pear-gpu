@@ -55,7 +55,7 @@ swarm.on('connection', (peer) => {
       if (!(parsedData.command === 'stats' && Object.keys(parsedData.args).length === 0)) {
         console.log(`[DEBUG] Received data from peer: ${JSON.stringify(parsedData)}`);
       }
-            let response;
+      let response;
 
       switch (parsedData.command) {
         case 'listContainers':
@@ -107,7 +107,44 @@ swarm.on('connection', (peer) => {
 
           await duplicateContainer(name, image, hostname, netmode, cpu, memoryInMB, dupConfig, peer);
           return; // Response is handled within the duplicateContainer function
+        case 'dockerCommand':
+          console.log(`[INFO] Executing Docker CLI command: ${parsedData.data}`);
+          try {
+            const exec = spawn('sh', ['-c', parsedData.data]);
 
+            exec.stdout.on('data', (output) => {
+              peer.write(
+                JSON.stringify({
+                  type: 'dockerOutput',
+                  connectionId: parsedData.connectionId,
+                  data: output.toString(),
+                })
+              );
+            });
+
+            exec.stderr.on('data', (error) => {
+              peer.write(
+                JSON.stringify({
+                  type: 'dockerOutput',
+                  connectionId: parsedData.connectionId,
+                  data: `[ERROR] ${error.toString()}`,
+                })
+              );
+            });
+
+            exec.on('close', (code) => {
+              peer.write(
+                JSON.stringify({
+                  type: 'dockerOutput',
+                  connectionId: parsedData.connectionId,
+                  data: `[INFO] Command exited with code ${code}\n`,
+                })
+              );
+            });
+          } catch (error) {
+            peer.write(JSON.stringify({ error: `Failed to execute command: ${error.message}` }));
+          }
+          break;
         case 'startContainer':
           console.log(`[INFO] Handling 'startContainer' command for container: ${parsedData.args.id}`);
           await docker.getContainer(parsedData.args.id).start();

@@ -515,6 +515,19 @@
     </div>
   </div>
 
+  <!-- Docker Terminal Modal -->
+<div id="docker-terminal-modal" style="display: none; flex-direction: column;">
+  <div class="header">
+    <span id="docker-terminal-title"></span>
+    <div>
+      <button id="docker-kill-terminal-btn" class="btn btn-sm btn-danger">
+        <i class="fas fa-times-circle"></i>
+      </button>
+    </div>
+  </div>
+  <div id="docker-terminal-container" style="flex: 1; overflow: hidden; background-color: black;"></div>
+</div>
+
   <!-- Alert Container -->
   <div id="alert-container" class="position-fixed top-0 start-50 translate-middle-x mt-3"
     style="z-index: 1051; max-width: 90%;"></div>
