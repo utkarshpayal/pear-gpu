@@ -230,7 +230,7 @@ deployForm.addEventListener('submit', async (e) => {
         // Wait for deployment to complete
         const successResponse = await deployDockerContainer(deployPayload);
         hideStatusIndicator();
-        showAlert('success', successResponse.message);
+        // showAlert('success', successResponse.message);
     } catch (error) {
         console.error('[ERROR] Failed to deploy container:', error.message);
         hideStatusIndicator();

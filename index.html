@@ -252,39 +252,52 @@
     }
 
     #alert-container {
-      position: fixed;
-      bottom: 20px;
-      right: 20px;
-      z-index: 1055;
-      /* Ensure it overlays important elements only */
-      display: flex;
-      flex-direction: column-reverse;
-      /* Stack alerts upwards */
-      gap: 10px;
-      /* Add space between alerts */
-      pointer-events: none;
-      /* Prevent container from blocking clicks */
-    }
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1055;
+  /* Ensure it overlays important elements only */
+  display: flex;
+  flex-direction: column-reverse;
+  /* Stack alerts upwards */
+  gap: 10px;
+  /* Add space between alerts */
+  pointer-events: none;
+  /* Prevent container from blocking clicks */
+}
 
-    .alert {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      max-width: 80%;
-      padding: 12px 20px;
-      background-color: #2b2b2b;
-      color: #e0e0e0;
-      border-radius: 6px;
-      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
-      font-family: Arial, sans-serif;
-      font-size: 14px;
-      animation: fadeIn 0.3s ease-out, fadeOut 4.5s ease-in forwards;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      pointer-events: auto;
-      /* Allow alerts to be interactive */
-    }
+#alert-container {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1055;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 10px;
+  pointer-events: none;
+  /* Prevent container from blocking clicks */
+}
+
+.alert {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  background-color: #2b2b2b;
+  color: #e0e0e0;
+  border-radius: 6px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+  font-family: Arial, sans-serif;
+  font-size: 14px;
+  animation: fadeIn 0.3s ease-out, fadeOut 4.5s ease-in forwards;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: auto;
+  /* Allow alerts to be interactive */
+}
 
     .alert.success {
       border-left: 6px solid #28a745;
@@ -672,6 +685,7 @@
   <!-- Alert Container -->
   <div id="alert-container" class="position-fixed top-0 start-50 translate-middle-x mt-3"
     style="z-index: 1051; max-width: 90%;"></div>
+
 
   <!-- xterm.js -->
   <script src="https://cdn.jsdelivr.net/npm/xterm/lib/xterm.js"></script>

@@ -266,31 +266,24 @@ function hideStatusIndicator() {
   }
 }
 // Show Alert
+// Show alert message
 function showAlert(type, message) {
-  const alertContainer = document.getElementById('alert-container');
+  const alertBox = document.createElement('div');
+  alertBox.className = `alert alert-${type}`;
+  alertBox.textContent = message;
 
-  // Create alert element
-  const alert = document.createElement('div');
-  alert.className = `alert ${type}`;
-  alert.innerHTML = `
-    <span>${message}</span>
-    <button class="close-btn" aria-label="Close">&times;</button>
-  `;
+  const container = document.querySelector('#alert-container');
+  if (container) {
+      container.appendChild(alertBox);
 
-  // Add close button functionality
-  const closeButton = alert.querySelector('.close-btn');
-  closeButton.addEventListener('click', () => {
-    alert.remove(); // Remove alert on close
-  });
-
-  // Append alert to container
-  alertContainer.appendChild(alert);
-
-  // Automatically remove alert after 5 seconds
-  setTimeout(() => {
-    alert.remove();
-  }, 5000);
+      setTimeout(() => {
+          container.removeChild(alertBox);
+      }, 5000);
+  } else {
+      console.warn('[WARN] Alert container not found.');
+  }
 }
+
 
 
 // Collapse Sidebar Functionality
