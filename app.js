@@ -412,6 +412,9 @@ function addConnection(topicHex) {
   <div class="connection-item row align-items-center px-2 py-1 border-bottom bg-dark text-light">
     <!-- Connection Info -->
     <div class="col-8 connection-info text-truncate">
+    	        <span>
+          <span class="connection-status ${connections[topicId].peer ? 'status-connected' : 'status-disconnected'}"></span>${topicId}
+        </span>
       <span class="topic-id d-block text-primary fw-bold" title="${topicId}">${topicId}</span>
     </div>
     <!-- Action Buttons -->
@@ -1093,7 +1096,7 @@ function showWelcomePage() {
   }
 
   if (connectionTitle) {
-    connectionTitle.textContent = '󠀠';
+    connectionTitle.textContent = '';
   } else {
     console.warn('[WARN] Connection title element not found!');
   }
