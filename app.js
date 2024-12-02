@@ -415,7 +415,6 @@ function addConnection(topicHex) {
     	        <span>
           <span class="connection-status ${connections[topicId].peer ? 'status-connected' : 'status-disconnected'}"></span>${topicId}
         </span>
-      <span class="topic-id d-block text-primary fw-bold" title="${topicId}">${topicId}</span>
     </div>
     <!-- Action Buttons -->
     <div class="col-4 d-flex justify-content-end">
@@ -644,7 +643,7 @@ function resetConnectionsView() {
     connectionItem.dataset.topicId = topicId;
     connectionItem.innerHTML = `
         <span>
-          <span class="connection-status ${connections[topicId].peer ? 'status-connected' : 'status-disconnected'}"></span>${topicId}
+          <span class="connection-status ${connections[topicId].peer ? 'status-connected' : 'status-disconnected'}"></span>
         </span>
         <button class="btn btn-sm btn-danger disconnect-btn">Disconnect</button>
       `;
