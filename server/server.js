@@ -206,7 +206,9 @@ swarm.on('connection', (peer) => {
           await docker.getContainer(parsedData.args.id).start();
           response = { success: true, message: `Container ${parsedData.args.id} started` };
           break;
-
+          // case 'allStats':
+          //   await handleallStatsRequest(peer);
+          //   return; // No further response needed
         case 'stopContainer':
           console.log(`[INFO] Handling 'stopContainer' command for container: ${parsedData.args.id}`);
           await docker.getContainer(parsedData.args.id).stop();
@@ -528,44 +530,6 @@ docker.listContainers({ all: true }, async (err, containers) => {
           ipAddress = networks[0].IPAddress; // Use the first network's IP
         }
       }
-
-      // Start streaming container stats
-      container.stats({ stream: true }, (statsErr, stream) => {
-        if (statsErr) {
-          console.error(`[ERROR] Failed to get stats for container ${containerInfo.Id}: ${statsErr.message}`);
-          return;
-        }
-
-        stream.on('data', (data) => {
-          try {
-            const stats = JSON.parse(data.toString());
-            const cpuUsage = calculateCPUPercent(stats);
-            const memoryUsage = stats.memory_stats.usage || 0; // Default to 0 if undefined
-
-            const statsData = {
-              id: containerInfo.Id,
-              cpu: cpuUsage,
-              memory: memoryUsage,
-              ip: ipAddress, // Use the pre-inspected IP address
-            };
-
-            // Broadcast stats to all connected peers
-            for (const peer of connectedPeers) {
-              peer.write(JSON.stringify({ type: 'stats', data: statsData }));
-            }
-          } catch (parseErr) {
-            // console.error(`[ERROR] Failed to parse stats for container ${containerInfo.Id}: ${parseErr.message}`);
-          }
-        });
-
-        stream.on('error', (streamErr) => {
-          // console.error(`[ERROR] Stats stream error for container ${containerInfo.Id}: ${streamErr.message}`);
-        });
-
-        stream.on('close', () => {
-          // console.log(`[INFO] Stats stream closed for container ${containerInfo.Id}`);
-        });
-      });
     });
   });
 });
@@ -672,62 +636,94 @@ function handleKillTerminal(containerId, peer) {
   }
 }
 
-function streamContainerStats(containerInfo) {
+async function collectContainerStats(containerStats) {
+  const currentContainers = await docker.listContainers({ all: true });
+  const currentIds = currentContainers.map((c) => c.Id);
+
+  // Collect stats for all containers, including newly added ones
+  for (const containerInfo of currentContainers) {
+    if (!containerStats[containerInfo.Id]) {
+      console.log(`[INFO] Found new container: ${containerInfo.Names[0]?.replace(/^\//, '')}`);
+      containerStats[containerInfo.Id] = await initializeContainerStats(containerInfo);
+    }
+  }
+
+  // Remove containers that no longer exist
+  Object.keys(containerStats).forEach((id) => {
+    if (!currentIds.includes(id)) {
+      console.log(`[INFO] Removing stats tracking for container: ${id}`);
+      delete containerStats[id];
+    }
+  });
+
+  return containerStats;
+}
+
+async function initializeContainerStats(containerInfo) {
   const container = docker.getContainer(containerInfo.Id);
 
-  // Use the same logic as listContainers to get the IP address
-  container.inspect((inspectErr, details) => {
-    let ipAddress = 'No IP Assigned'; // Default IP address fallback
+  // Inspect container for IP address
+  let ipAddress = 'No IP Assigned';
+  try {
+    const details = await container.inspect();
+    const networks = details.NetworkSettings?.Networks || {};
+    ipAddress = Object.values(networks)[0]?.IPAddress || 'No IP Assigned';
+  } catch (err) {
+    console.error(`[ERROR] Failed to inspect container ${containerInfo.Id}: ${err.message}`);
+  }
 
-    if (inspectErr) {
-      console.error(`[ERROR] Failed to inspect container ${containerInfo.Id}: ${inspectErr.message}`);
-    } else if (details.NetworkSettings && details.NetworkSettings.Networks) {
-      const networks = Object.values(details.NetworkSettings.Networks);
-      if (networks.length > 0 && networks[0].IPAddress) {
-        ipAddress = networks[0].IPAddress; // Retrieve the first network's IP address
+  const statsData = {
+    id: containerInfo.Id,
+    name: containerInfo.Names[0]?.replace(/^\//, '') || 'Unknown',
+    cpu: 0,
+    memory: 0,
+    ip: ipAddress,
+  };
+
+  // Start streaming stats for the container
+  try {
+    const statsStream = await container.stats({ stream: true });
+    statsStream.on('data', (data) => {
+      try {
+        const stats = JSON.parse(data.toString());
+        statsData.cpu = calculateCPUPercent(stats);
+        statsData.memory = stats.memory_stats.usage || 0;
+      } catch (err) {
+        console.error(`[ERROR] Failed to parse stats for container ${containerInfo.Id}: ${err.message}`);
       }
-    }
-
-    // Start streaming container stats
-    container.stats({ stream: true }, (statsErr, stream) => {
-      if (statsErr) {
-        console.error(`[ERROR] Failed to get stats for container ${containerInfo.Id}: ${statsErr.message}`);
-        return;
-      }
-
-      stream.on('data', (data) => {
-        try {
-          const stats = JSON.parse(data.toString());
-          const cpuUsage = calculateCPUPercent(stats);
-          const memoryUsage = stats.memory_stats.usage || 0; // Default to 0 if undefined
-
-          // Use the extracted IP address in the stats data
-          const statsData = {
-            id: containerInfo.Id,
-            cpu: cpuUsage,
-            memory: memoryUsage,
-            ip: ipAddress, // Use the IP address retrieved during inspection
-          };
-
-          // Broadcast stats to all connected peers
-          for (const peer of connectedPeers) {
-            peer.write(JSON.stringify({ type: 'stats', data: statsData }));
-          }
-        } catch (parseErr) {
-          console.error(`[ERROR] Failed to parse stats for container ${containerInfo.Id}: ${parseErr.message}`);
-        }
-      });
-
-      stream.on('error', (streamErr) => {
-        console.error(`[ERROR] Stats stream error for container ${containerInfo.Id}: ${streamErr.message}`);
-      });
-
-      stream.on('close', () => {
-        console.log(`[INFO] Stats stream closed for container ${containerInfo.Id}`);
-      });
     });
-  });
+
+    statsStream.on('error', (err) => {
+      console.error(`[ERROR] Stats stream error for container ${containerInfo.Id}: ${err.message}`);
+    });
+
+    statsStream.on('close', () => {
+      console.log(`[INFO] Stats stream closed for container ${containerInfo.Id}`);
+    });
+  } catch (err) {
+    console.error(`[ERROR] Failed to start stats stream for container ${containerInfo.Id}: ${err.message}`);
+  }
+
+  return statsData;
 }
+
+async function handleStatsBroadcast() {
+  const containerStats = {};
+
+  // Periodically update stats and broadcast
+  setInterval(async () => {
+    await collectContainerStats(containerStats);
+    const aggregatedStats = Object.values(containerStats);
+    const response = { type: 'allStats', data: aggregatedStats };
+
+    for (const peer of connectedPeers) {
+      peer.write(JSON.stringify(response));
+    }
+  }, 1000); // Send stats every 500ms
+}
+
+// Start the stats broadcast
+handleStatsBroadcast();
 
 
 

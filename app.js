@@ -64,7 +64,7 @@ function startStatsInterval() {
     if (window.activePeer) {
       const now = Date.now();
       if (now - lastStatsUpdate >= 500) { // Ensure at least 500ms between updates
-        sendCommand('stats', {}); // Adjust command if necessary
+        // sendCommand('allStats', {}); // Adjust command if necessary
         lastStatsUpdate = now;
       }
     } else {
@@ -334,12 +334,9 @@ function handlePeerData(data, topicId, peer) {
 
     // Delegate handling based on the response type
     switch (response.type) {
-      case 'stats':
-        console.log('[INFO] Updating container stats...');
-        const stats = response.data;
-        stats.ip = stats.ip || 'No IP Assigned'; // Add a fallback for missing IPs
-        console.log(`[DEBUG] Passing stats to updateContainerStats: ${JSON.stringify(stats, null, 2)}`);
-        updateContainerStats(stats);
+      case 'allStats':
+        console.log('[INFO] Received aggregated stats for all containers.');
+        response.data.forEach((stats) => updateContainerStats(stats));
         break;
 
       case 'containers':
