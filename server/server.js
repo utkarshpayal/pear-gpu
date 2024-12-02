@@ -110,10 +110,11 @@ swarm.on('connection', (peer) => {
           case 'dockerCommand':
             console.log(`[INFO] Executing Docker CLI command: ${parsedData.data}`);
             try {
-              const exec = spawn('sh', ['-c', parsedData.data]); // Use `spawn` to execute the Docker command
+              const exec = spawn('sh', ['-c', parsedData.data]); // Use spawn to run the Docker command
           
+              // Handle stdout (command output)
               exec.stdout.on('data', (output) => {
-                console.log(`[DEBUG] Command output: ${output.toString()}`); // Log the command output
+                console.log(`[DEBUG] Command output: ${output.toString()}`);
                 peer.write(
                   JSON.stringify({
                     type: 'dockerOutput',
@@ -123,8 +124,9 @@ swarm.on('connection', (peer) => {
                 );
               });
           
+              // Handle stderr (errors)
               exec.stderr.on('data', (error) => {
-                console.error(`[ERROR] Command error output: ${error.toString()}`); // Log any errors
+                console.error(`[ERROR] Command error output: ${error.toString()}`);
                 peer.write(
                   JSON.stringify({
                     type: 'dockerOutput',
@@ -134,6 +136,7 @@ swarm.on('connection', (peer) => {
                 );
               });
           
+              // Handle command completion
               exec.on('close', (code) => {
                 console.log(`[INFO] Command exited with code: ${code}`);
                 peer.write(
