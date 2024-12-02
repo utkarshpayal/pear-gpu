@@ -222,8 +222,8 @@ deployForm.addEventListener('submit', async (e) => {
     console.log('[DEBUG] Deploy payload:', deployPayload);
 
     try {
-        // showStatusIndicator('Deploying container...');
-
+        showStatusIndicator('Deploying container...');
+        closeAllModals();
         // Send the deployment request
         await deployDockerContainer(deployPayload);
 
@@ -235,8 +235,8 @@ deployForm.addEventListener('submit', async (e) => {
 
         console.log('[INFO] Deployment success:', successResponse);
         hideStatusIndicator();
-        closeAllModals();
         showAlert('success', successResponse.message);
+        startStatsInterval();
     } catch (error) {
         console.error('[ERROR] Failed to deploy container:', error.message);
         hideStatusIndicator();

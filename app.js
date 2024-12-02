@@ -108,6 +108,7 @@ function waitForPeerResponse(expectedMessageFragment, timeout = 900000) {
 
     window.handlePeerResponse = (response) => {
       console.log(`[DEBUG] Received response: ${JSON.stringify(response)}`);
+      console.log(response.message)
       if (response && response.success && response.message.includes(expectedMessageFragment)) {
         console.log(`[DEBUG] Expected response received: ${response.message}`);
         resolve(response);
@@ -310,7 +311,16 @@ function handlePeerData(data, topicId, peer) {
     // Parse the incoming data
     const response = JSON.parse(data.toString());
     console.log(`[DEBUG] Received data from peer (topic: ${topicId}): ${JSON.stringify(response)}`);
+    console.log(response.message)
+    if (response.success && response.message.includes && response.message.includes('deployed successfully')) {
+      console.log(`[INFO] Template deployed successfully: ${response.message}`);
+      hideStatusIndicator();
+      startStatsInterval(); // Restart stats polling
+      showAlert('success', response.message);
+      closeAllModals(); // Close all modals after successful deployment
+      hideStatusIndicator();
 
+    }
     // Ensure the data is for the active connection
     if (!connections[topicId]) {
       console.warn(`[WARN] No connection found for topic: ${topicId}. Ignoring data.`);
