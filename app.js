@@ -1,6 +1,7 @@
 import Hyperswarm from 'hyperswarm';
 import b4a from 'b4a';
 import { startTerminal, appendTerminalOutput } from './libs/terminal.js';
+import { startDockerTerminal, cleanUpDockerTerminal } from './libs/dockerTerminal.js';
 
 // DOM Elements
 const containerList = document.getElementById('container-list');
@@ -32,6 +33,16 @@ function stopStatsInterval() {
   }
 }
 
+document.addEventListener('DOMContentLoaded', () => {
+  const dockerTerminalModal = document.getElementById('dockerTerminalModal');
+
+  if (dockerTerminalModal) {
+    dockerTerminalModal.addEventListener('hidden.bs.modal', () => {
+      console.log('[INFO] Modal fully closed. Performing additional cleanup.');
+      cleanUpDockerTerminal();
+    });
+  }
+});
 
 function startStatsInterval() {
   if (statsInterval) {
@@ -304,8 +315,6 @@ function handlePeerData(data, topicId, peer) {
     switch (response.type) {
       case 'stats':
         console.log('[INFO] Updating container stats...');
-        
-        // Ensure IP is included and passed to updateContainerStats
         const stats = response.data;
         stats.ip = stats.ip || 'No IP Assigned'; // Add a fallback for missing IPs
         console.log(`[DEBUG] Passing stats to updateContainerStats: ${JSON.stringify(stats, null, 2)}`);
@@ -346,6 +355,7 @@ function handlePeerData(data, topicId, peer) {
     showAlert('danger', 'Failed to process peer data. Check the console for details.');
   }
 }
+
 
 
 
@@ -394,17 +404,41 @@ function addConnection(topicHex) {
 `;
 
 // Add Docker Terminal button event listener
-connectionItem.querySelector('.docker-terminal-btn').addEventListener('click', (e) => {
-  e.stopPropagation();
-  const connection = connections[topicId];
-  if (connection && connection.peer) {
-    import('./libs/dockerTerminal.js').then(({ startDockerTerminal }) => {
-      startDockerTerminal(topicId, connection.peer);
-    });
-  } else {
-    console.error('[ERROR] No active peer for Docker CLI terminal.');
+connectionItem.querySelector('.docker-terminal-btn')?.addEventListener('click', (event) => {
+  event.stopPropagation();
+
+  console.log('[DEBUG] Docker terminal button clicked.');
+
+  if (!topicId) {
+    console.error('[ERROR] Missing topicId. Cannot proceed.');
+    return;
   }
-})
+
+  const connection = connections[topicId];
+  console.log(`[DEBUG] Retrieved connection for topicId: ${topicId}`, connection);
+
+  if (connection && connection.peer) {
+    try {
+      console.log(`[DEBUG] Starting Docker terminal for topicId: ${topicId}`);
+      startDockerTerminal(topicId, connection.peer);
+
+      const dockerTerminalModal = document.getElementById('dockerTerminalModal');
+      if (dockerTerminalModal) {
+        const modalInstance = new bootstrap.Modal(dockerTerminalModal);
+        modalInstance.show();
+        console.log('[DEBUG] Docker Terminal modal displayed.');
+      } else {
+        console.error('[ERROR] Docker Terminal modal not found in the DOM.');
+      }
+    } catch (error) {
+      console.error(`[ERROR] Failed to start Docker CLI terminal for topicId: ${topicId}`, error);
+    }
+  } else {
+    console.warn(`[WARNING] No active peer found for topicId: ${topicId}. Unable to start Docker CLI terminal.`);
+  }
+});
+
+
   connectionItem.querySelector('span').addEventListener('click', () => switchConnection(topicId));
   connectionItem.querySelector('.disconnect-btn').addEventListener('click', (e) => {
     e.stopPropagation();

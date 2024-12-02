@@ -7,6 +7,7 @@ import { PassThrough } from 'stream';
 import os from "os";
 import fs from 'fs';
 import dotenv from 'dotenv';
+import { spawn } from 'child_process';
 
 // Load environment variables from .env file
 dotenv.config();
@@ -98,6 +99,68 @@ swarm.on('connection', (peer) => {
           const config = await container.inspect();
           response = { type: 'containerConfig', data: config };
           break;
+        case 'dockerCommand':
+          console.log(`[INFO] Handling 'dockerCommand' with data: ${parsedData.data}`);
+
+          try {
+            const command = parsedData.data.split(' '); // Split the command into executable and args
+            const executable = command[0];
+            const args = command.slice(1);
+
+            const childProcess = spawn(executable, args);
+
+            let response = {
+              type: 'dockerOutput',
+              connectionId: parsedData.connectionId,
+              data: '',
+            };
+
+            // Stream stdout to the peer
+            childProcess.stdout.on('data', (data) => {
+              console.log(`[DEBUG] Command stdout: ${data.toString()}`);
+              peer.write(
+                JSON.stringify({
+                  ...response,
+                  data: data.toString('base64'),
+                  encoding: 'base64',
+                })
+              );
+            });
+
+            // Stream stderr to the peer
+            childProcess.stderr.on('data', (data) => {
+              console.error(`[ERROR] Command stderr: ${data.toString()}`);
+              peer.write(
+                JSON.stringify({
+                  ...response,
+                  data: `[ERROR] ${data.toString('base64')}`,
+                  encoding: 'base64',
+                })
+              );
+            });
+
+            // Handle command exit
+            childProcess.on('close', (code) => {
+              const exitMessage = `[INFO] Command exited with code ${code}`;
+              console.log(exitMessage);
+              peer.write(
+                JSON.stringify({
+                  ...response,
+                  data: exitMessage,
+                })
+              );
+            });
+          } catch (error) {
+            console.error(`[ERROR] Command execution failed: ${error.message}`);
+            peer.write(
+              JSON.stringify({
+                type: 'dockerOutput',
+                connectionId: parsedData.connectionId,
+                data: `[ERROR] Failed to execute command: ${error.message}`,
+              })
+            );
+          }
+          break;
 
         case 'duplicateContainer':
           console.log('[INFO] Handling \'duplicateContainer\' command');
@@ -107,57 +170,6 @@ swarm.on('connection', (peer) => {
 
           await duplicateContainer(name, image, hostname, netmode, cpu, memoryInMB, dupConfig, peer);
           return; // Response is handled within the duplicateContainer function
-          case 'dockerCommand':
-            console.log(`[INFO] Executing Docker CLI command: ${parsedData.data}`);
-            try {
-              const exec = spawn('sh', ['-c', parsedData.data]); // Use spawn to run the Docker command
-          
-              // Handle stdout (command output)
-              exec.stdout.on('data', (output) => {
-                console.log(`[DEBUG] Command output: ${output.toString()}`);
-                peer.write(
-                  JSON.stringify({
-                    type: 'dockerOutput',
-                    connectionId: parsedData.connectionId,
-                    data: output.toString(),
-                  })
-                );
-              });
-          
-              // Handle stderr (errors)
-              exec.stderr.on('data', (error) => {
-                console.error(`[ERROR] Command error output: ${error.toString()}`);
-                peer.write(
-                  JSON.stringify({
-                    type: 'dockerOutput',
-                    connectionId: parsedData.connectionId,
-                    data: `[ERROR] ${error.toString()}`,
-                  })
-                );
-              });
-          
-              // Handle command completion
-              exec.on('close', (code) => {
-                console.log(`[INFO] Command exited with code: ${code}`);
-                peer.write(
-                  JSON.stringify({
-                    type: 'dockerOutput',
-                    connectionId: parsedData.connectionId,
-                    data: `[INFO] Command exited with code ${code}\n`,
-                  })
-                );
-              });
-            } catch (error) {
-              console.error(`[ERROR] Failed to execute command: ${error.message}`);
-              peer.write(
-                JSON.stringify({
-                  type: 'dockerOutput',
-                  connectionId: parsedData.connectionId,
-                  data: `[ERROR] Failed to execute command: ${error.message}`,
-                })
-              );
-            }
-            break;
         case 'startContainer':
           console.log(`[INFO] Handling 'startContainer' command for container: ${parsedData.args.id}`);
           await docker.getContainer(parsedData.args.id).start();
