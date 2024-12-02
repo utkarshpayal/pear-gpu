@@ -4,16 +4,14 @@ const templateSearchInput = document.getElementById('template-search-input');
 const templateDeployModal = new bootstrap.Modal(document.getElementById('templateDeployModalUnique'));
 const deployForm = document.getElementById('deploy-form');
 let templates = [];
-
-// Function to close all modals
 function closeAllModals() {
-    const modals = document.querySelectorAll('.modal.show');
-    modals.forEach(modal => {
-        const modalInstance = bootstrap.Modal.getInstance(modal);
-        if (modalInstance) modalInstance.hide();
-    });
+  // Find and hide all open modals
+  const modals = document.querySelectorAll('.modal.show'); // Adjust selector if necessary
+  modals.forEach(modal => {
+    const modalInstance = bootstrap.Modal.getInstance(modal); // Get Bootstrap modal instance
+    modalInstance.hide(); // Close the modal
+  });
 }
-
 // Show status indicator
 function showStatusIndicator(message = 'Processing...') {
     const statusIndicator = document.createElement('div');
@@ -157,7 +155,6 @@ function openDeployModal(template) {
 }
 
 // Deploy Docker container
-// Deploy Docker container
 async function deployDockerContainer(payload) {
     const { containerName, imageName, ports = [], volumes = [], envVars = [] } = payload;
 
@@ -178,33 +175,40 @@ async function deployDockerContainer(payload) {
     });
 
     console.log('[INFO] Sending deployment command to the server...');
-    sendCommand('deployContainer', {
-        containerName,
-        image: imageName,
-        ports: validPorts,
-        volumes: validVolumes,
-        env: envVars.map(({ name, value }) => ({ name, value })),
+
+    return new Promise((resolve, reject) => {
+        window.handlePeerResponse = (response) => {
+            if (response.success && response.message.includes('deployed successfully')) {
+                console.log('[INFO] Deployment response received:', response.message);
+                resolve(response); // Resolve with success
+            } else if (response.error) {
+                reject(new Error(response.error)); // Reject on error
+            }
+        };
+
+        // Send the deployment command
+        sendCommand('deployContainer', {
+            containerName,
+            image: imageName,
+            ports: validPorts,
+            volumes: validVolumes,
+            env: envVars.map(({ name, value }) => ({ name, value })),
+        });
+
+        // Fallback timeout to avoid hanging indefinitely
+        setTimeout(() => {
+            reject(new Error('Deployment timed out. No response from server.'));
+        }, 30000); // Adjust timeout duration as needed
     });
 }
 
-// Example of how to dispatch the event when the server response is received
-function handleServerResponse(serverResponse) {
-    console.log('[DEBUG] Dispatching server response:', serverResponse);
-    const responseEvent = new CustomEvent('responseReceived', { detail: serverResponse });
-    window.dispatchEvent(responseEvent);
-}
 
-// Integration for server response handling
-// Ensure this function is called whenever a server response is received
-async function processServerMessage(response) {
-    if (response.type === 'deployResult') {
-        handleServerResponse(response);
-    }
-}
 
-// Handle form submission for deployment
+
 // Handle form submission for deployment
 deployForm.addEventListener('submit', async (e) => {
+    closeAllModals();
+
     e.preventDefault();
 
     const containerName = document.getElementById('deploy-container-name').value.trim();
@@ -223,22 +227,18 @@ deployForm.addEventListener('submit', async (e) => {
 
     try {
         showStatusIndicator('Deploying container...');
-        closeAllModals();
-        // Send the deployment request
-        await deployDockerContainer(deployPayload);
-
-        // Wait for a specific response
-        // Wait for the specific response
-
-        console.log('[INFO] Deployment success:', successResponse);
+        // Wait for deployment to complete
+        const successResponse = await deployDockerContainer(deployPayload);
         hideStatusIndicator();
         showAlert('success', successResponse.message);
     } catch (error) {
         console.error('[ERROR] Failed to deploy container:', error.message);
         hideStatusIndicator();
+        closeAllModals();
         showAlert('danger', error.message);
     }
 });
+
 // Initialize templates on load
 document.addEventListener('DOMContentLoaded', fetchTemplates);
 

@@ -314,10 +314,11 @@ function handlePeerData(data, topicId, peer) {
     console.log(response.message)
     if (response.success && response.message.includes && response.message.includes('deployed successfully')) {
       console.log(`[INFO] Template deployed successfully: ${response.message}`);
+      closeAllModals(); // Close all modals after successful deployment
+
       hideStatusIndicator();
       startStatsInterval(); // Restart stats polling
       showAlert('success', response.message);
-      closeAllModals(); // Close all modals after successful deployment
       hideStatusIndicator();
 
     }
