@@ -9,16 +9,12 @@
       "height": "400",
       "width": "950"
     },
-    "links": [
-      "http://127.0.0.1",
-      "http://localhost",
-      "https://ka-f.fontawesome.com",
-      "https://cdn.jsdelivr.net",
-      "https://cdnjs.cloudflare.com",
-      "ws://localhost:8080",
-      "https://raw.githubusercontent.com",
-      "https://portainer-io-assets.sfo2.digitaloceanspaces.com"
-    ]
+"links": [
+  "http://*",
+  "https://*",
+  "ws://*",
+  "wss://*"
+]
   },
   "type": "module",
   "license": "Apache-2.0",

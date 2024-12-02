@@ -349,8 +349,8 @@ function handlePeerData(data, topicId, peer) {
           window.inspectContainerCallback = null; // Reset the callback
         }
         break;
-      
-        case 'logs':
+
+      case 'logs':
         console.log('[INFO] Handling logs output...');
         if (window.handleLogOutput) {
           window.handleLogOutput(response);
@@ -408,21 +408,24 @@ function addConnection(topicHex) {
   connectionItem.className = 'list-group-item d-flex align-items-center justify-content-between';
   connectionItem.dataset.topicId = topicId;
   connectionItem.innerHTML = `
-  <div class="connection-item d-flex align-items-center justify-content-between p-2">
-    <div class="connection-info">
-      <span class="topic-id">${topicId}</span>
-      <span class="connection-status status-disconnected ms-2"></span>
-    </div><BR>
-    <div class="btn-group">
-      <button class="btn btn-sm btn-primary docker-terminal-btn" title="Open Terminal">
-        <i class="fas fa-terminal"></i>
-      </button>
-      <button class="btn btn-sm btn-secondary deploy-template-btn" title="Deploy Template">
-        <i class="fas fa-cubes"></i>
-      </button>
-      <button class="btn btn-sm btn-danger disconnect-btn" title="Disconnect">
-        <i class="fas fa-plug"></i>
-      </button>
+  <div class="connection-item row align-items-center px-2 py-1 border-bottom bg-dark text-light">
+    <!-- Connection Info -->
+    <div class="col-8 connection-info text-truncate">
+      <span class="topic-id d-block text-primary fw-bold" title="${topicId}">${topicId}</span>
+    </div>
+    <!-- Action Buttons -->
+    <div class="col-4 d-flex justify-content-end">
+      <div class="btn-group btn-group-sm">
+        <button class="btn btn-outline-primary docker-terminal-btn p-1" title="Open Terminal">
+          <i class="fas fa-terminal"></i>
+        </button>
+        <button class="btn btn-outline-secondary deploy-template-btn p-1" title="Deploy Template">
+          <i class="fas fa-cubes"></i>
+        </button>
+        <button class="btn btn-outline-danger disconnect-btn p-1" title="Disconnect">
+          <i class="fas fa-plug"></i>
+        </button>
+      </div>
     </div>
   </div>
 `;
@@ -732,37 +735,39 @@ function renderContainers(containers, topicId) {
     const row = document.createElement('tr');
     row.dataset.containerId = containerId; // Store container ID for reference
     row.innerHTML = `
-  <td>${name}</td>
-  <td>${image}</td>
-  <td>${container.State || 'Unknown'}</td>
-  <td class="cpu">0</td>
-  <td class="memory">0</td>
-  <td class="ip-address">${ipAddress}</td>
-  <td>
-    <button class="btn btn-success btn-sm action-start" ${container.State === 'running' ? 'disabled' : ''}>
-      <i class="fas fa-play"></i>
-    </button>
-    <button class="btn btn-info btn-sm action-restart" ${container.State !== 'running' ? 'disabled' : ''}>
-      <i class="fas fa-redo"></i>
-    </button>
-    <button class="btn btn-warning btn-sm action-stop" ${container.State !== 'running' ? 'disabled' : ''}>
-      <i class="fas fa-stop"></i>
-    </button>
-    <button class="btn btn-dark btn-sm action-logs">
-      <i class="fas fa-binoculars"></i>
-    </button>
-    <button class="btn btn-danger btn-sm action-remove">
-      <i class="fas fa-trash"></i>
-    </button>
-    <button class="btn btn-primary btn-sm action-terminal" ${container.State !== 'running' ? 'disabled' : ''}>
-      <i class="fas fa-terminal"></i>
-    </button>
-    <button class="btn btn-secondary btn-sm action-duplicate">
-      <i class="fas fa-clone"></i>
-    </button>
+    <td>${name}</td>
+    <td>${image}</td>
+    <td>${container.State || 'Unknown'}</td>
+    <td class="cpu">0</td>
+    <td class="memory">0</td>
+    <td class="ip-address">${ipAddress}</td>
+    <td>
+      <div class="btn-group btn-group-sm">
+        <button class="btn btn-outline-success action-start p-1" title="Start" ${container.State === 'running' ? 'disabled' : ''}>
+          <i class="fas fa-play"></i>
+        </button>
+        <button class="btn btn-outline-info action-restart p-1" title="Restart" ${container.State !== 'running' ? 'disabled' : ''}>
+          <i class="fas fa-redo"></i>
+        </button>
+        <button class="btn btn-outline-warning action-stop p-1" title="Stop" ${container.State !== 'running' ? 'disabled' : ''}>
+          <i class="fas fa-stop"></i>
+        </button>
+<button class="btn btn-outline-primary action-logs p-1" title="Logs">
+  <i class="fas fa-list-alt"></i>
+</button>
+        <button class="btn btn-outline-primary action-terminal p-1" title="Terminal" ${container.State !== 'running' ? 'disabled' : ''}>
+          <i class="fas fa-terminal"></i>
+        </button>
+        <button class="btn btn-outline-secondary action-duplicate p-1" title="Duplicate">
+          <i class="fas fa-clone"></i>
+        </button>
+        <button class="btn btn-outline-danger action-remove p-1" title="Remove">
+          <i class="fas fa-trash"></i>
+        </button>
+      </div>
+    </td>
+  `;
 
-  </td>
-`;
     containerList.appendChild(row);
     // Add event listener for duplicate button
     const duplicateBtn = row.querySelector('.action-duplicate');
