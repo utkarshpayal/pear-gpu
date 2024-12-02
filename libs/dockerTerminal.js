@@ -10,87 +10,98 @@ const dockerKillTerminalBtn = document.getElementById('docker-kill-terminal-btn'
 // Terminal variables
 let dockerTerminalSession = null;
 
-// Start Docker CLI terminal session
 function startDockerTerminal(connectionId, peer) {
-  if (!peer) {
-    console.error('[ERROR] No active peer for Docker CLI terminal.');
-    return;
-  }
-
-  if (dockerTerminalSession) {
-    console.log(`[INFO] Docker CLI terminal session already exists for connection: ${connectionId}`);
-    return;
-  }
-
-  console.log(`[INFO] Starting Docker CLI terminal for connection: ${connectionId}`);
-
-  const xterm = new Terminal({
-    cursorBlink: true,
-    theme: { background: '#1a1a1a', foreground: '#ffffff' },
-  });
-  const fitAddon = new FitAddon();
-  xterm.loadAddon(fitAddon);
-
-  dockerTerminalContainer.innerHTML = ''; // Clear previous content
-  xterm.open(dockerTerminalContainer);
-  fitAddon.fit();
-
-  dockerTerminalSession = { xterm, fitAddon, connectionId, peer };
-
-  xterm.onData((input) => {
-    const sanitizedInput = sanitizeDockerCommand(input.trim());
-    if (sanitizedInput) {
-      console.log(`[DEBUG] Sending Docker CLI command: ${sanitizedInput}`);
-      peer.write(
-        JSON.stringify({
-          type: 'dockerCommand',
-          data: sanitizedInput,
-        })
-      );
-    } else {
-      xterm.write('\r\n[ERROR] Invalid command. Only Docker CLI commands are allowed.\r\n');
+    if (!peer) {
+      console.error('[ERROR] No active peer for Docker CLI terminal.');
+      return;
     }
-  });
-
-  peer.on('data', (data) => {
-    try {
-      const response = JSON.parse(data.toString());
-      if (response.type === 'dockerOutput' && response.connectionId === connectionId) {
-        xterm.write(response.data);
+  
+    if (dockerTerminalSession) {
+      console.log('[INFO] Docker CLI terminal session already exists.');
+      return;
+    }
+  
+    const xterm = new Terminal({
+      cursorBlink: true,
+      theme: { background: '#000000', foreground: '#ffffff' },
+    });
+    const fitAddon = new FitAddon();
+    xterm.loadAddon(fitAddon);
+  
+    dockerTerminalContainer.innerHTML = ''; // Clear previous content
+    xterm.open(dockerTerminalContainer);
+    fitAddon.fit();
+  
+    dockerTerminalSession = { xterm, fitAddon, connectionId, peer };
+  
+    let inputBuffer = ''; // Buffer for user input
+  
+    xterm.onData((input) => {
+      if (input === '\r') { // User pressed Enter
+        const sanitizedInput = sanitizeDockerCommand(inputBuffer.trim());
+        if (sanitizedInput) {
+          console.log(`[DEBUG] Sending Docker CLI command: ${sanitizedInput}`);
+          peer.write(
+            JSON.stringify({
+              type: 'dockerCommand',
+              connectionId,
+              data: sanitizedInput,
+            })
+          );
+          xterm.write('\r\n'); // Move to the next line in the terminal
+        } else {
+          xterm.write('\r\n[ERROR] Invalid command. Only Docker CLI commands are allowed.\r\n');
+        }
+        inputBuffer = ''; // Clear the buffer after processing
+      } else if (input === '\u007F') { // Handle backspace
+        if (inputBuffer.length > 0) {
+          inputBuffer = inputBuffer.slice(0, -1); // Remove the last character from the buffer
+          xterm.write('\b \b'); // Erase the character from the terminal display
+        }
+      } else {
+        inputBuffer += input; // Append input to the buffer
+        xterm.write(input); // Display input in the terminal
       }
-    } catch (error) {
-      console.error(`[ERROR] Failed to parse response from peer: ${error.message}`);
-    }
-  });
-
-  dockerTerminalTitle.textContent = `Docker CLI Terminal: ${connectionId}`;
-  dockerTerminalModal.style.display = 'flex';
-}
-
+    });
+  
+    peer.on('data', (data) => {
+      try {
+        const response = JSON.parse(data.toString());
+        if (response.type === 'dockerOutput' && response.connectionId === connectionId) {
+          xterm.write(`${response.data}\r\n`);
+        }
+      } catch (error) {
+        console.error(`[ERROR] Failed to parse response from peer: ${error.message}`);
+      }
+    });
+  
+    dockerTerminalTitle.textContent = `Docker CLI Terminal: ${connectionId}`;
+    dockerTerminalModal.style.display = 'flex';
+  
+    dockerKillTerminalBtn.onclick = () => {
+      cleanUpDockerTerminal();
+    };
+  }
+  
 // Sanitize input to ensure only Docker CLI commands are allowed
 function sanitizeDockerCommand(command) {
-  const allowedCommands = ['docker', 'docker-compose'];
-  const parts = command.split(/\s+/);
-  const baseCommand = parts[0];
-
-  if (allowedCommands.includes(baseCommand)) {
-    return command; // Valid Docker command
+    // Allow commands starting with "docker" and disallow dangerous operators
+    const isValid = /^docker(\s+[\w.-]+)*$/i.test(command);
+    return isValid ? command : null;
   }
-
-  return null; // Invalid command
-}
 
 // Clean up Docker CLI terminal session
 function cleanUpDockerTerminal() {
-  if (dockerTerminalSession) {
-    dockerTerminalSession.xterm.dispose();
-    dockerTerminalSession = null;
-    dockerTerminalContainer.innerHTML = '';
-    dockerTerminalModal.style.display = 'none';
-    console.log('[INFO] Docker CLI terminal session cleaned up.');
+    if (dockerTerminalSession) {
+      dockerTerminalSession.xterm.dispose();
+      dockerTerminalSession = null;
+      dockerTerminalContainer.innerHTML = ''; // Clear terminal content
+      dockerTerminalModal.style.display = 'none'; // Hide the modal
+      dockerTerminalModal.classList.add('hidden');
+      console.log('[INFO] Docker CLI terminal session cleaned up.');
+    }
   }
-}
-
+  
 // Handle Kill Terminal button
 dockerKillTerminalBtn.onclick = () => {
   cleanUpDockerTerminal();

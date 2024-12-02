@@ -398,7 +398,7 @@ connectionItem.querySelector('.docker-terminal-btn').addEventListener('click', (
   e.stopPropagation();
   const connection = connections[topicId];
   if (connection && connection.peer) {
-    import('./dockerTerminal.js').then(({ startDockerTerminal }) => {
+    import('./libs/dockerTerminal.js').then(({ startDockerTerminal }) => {
       startDockerTerminal(topicId, connection.peer);
     });
   } else {

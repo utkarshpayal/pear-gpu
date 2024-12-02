@@ -107,44 +107,52 @@ swarm.on('connection', (peer) => {
 
           await duplicateContainer(name, image, hostname, netmode, cpu, memoryInMB, dupConfig, peer);
           return; // Response is handled within the duplicateContainer function
-        case 'dockerCommand':
-          console.log(`[INFO] Executing Docker CLI command: ${parsedData.data}`);
-          try {
-            const exec = spawn('sh', ['-c', parsedData.data]);
-
-            exec.stdout.on('data', (output) => {
+          case 'dockerCommand':
+            console.log(`[INFO] Executing Docker CLI command: ${parsedData.data}`);
+            try {
+              const exec = spawn('sh', ['-c', parsedData.data]); // Use `spawn` to execute the command
+          
+              exec.stdout.on('data', (output) => {
+                console.log(`[DEBUG] Command output: ${output.toString()}`);
+                peer.write(
+                  JSON.stringify({
+                    type: 'dockerOutput',
+                    connectionId: parsedData.connectionId,
+                    data: output.toString(),
+                  })
+                );
+              });
+          
+              exec.stderr.on('data', (error) => {
+                console.error(`[ERROR] Command error output: ${error.toString()}`);
+                peer.write(
+                  JSON.stringify({
+                    type: 'dockerOutput',
+                    connectionId: parsedData.connectionId,
+                    data: `[ERROR] ${error.toString()}`,
+                  })
+                );
+              });
+          
+              exec.on('close', (code) => {
+                console.log(`[INFO] Command exited with code: ${code}`);
+                peer.write(
+                  JSON.stringify({
+                    type: 'dockerOutput',
+                    connectionId: parsedData.connectionId,
+                    data: `[INFO] Command exited with code ${code}\n`,
+                  })
+                );
+              });
+            } catch (error) {
+              console.error(`[ERROR] Failed to execute command: ${error.message}`);
               peer.write(
-                JSON.stringify({
-                  type: 'dockerOutput',
-                  connectionId: parsedData.connectionId,
-                  data: output.toString(),
+                JSON.stringify({ 
+                  error: `Failed to execute command: ${error.message}` 
                 })
               );
-            });
-
-            exec.stderr.on('data', (error) => {
-              peer.write(
-                JSON.stringify({
-                  type: 'dockerOutput',
-                  connectionId: parsedData.connectionId,
-                  data: `[ERROR] ${error.toString()}`,
-                })
-              );
-            });
-
-            exec.on('close', (code) => {
-              peer.write(
-                JSON.stringify({
-                  type: 'dockerOutput',
-                  connectionId: parsedData.connectionId,
-                  data: `[INFO] Command exited with code ${code}\n`,
-                })
-              );
-            });
-          } catch (error) {
-            peer.write(JSON.stringify({ error: `Failed to execute command: ${error.message}` }));
-          }
-          break;
+            }
+            break;
         case 'startContainer':
           console.log(`[INFO] Handling 'startContainer' command for container: ${parsedData.args.id}`);
           await docker.getContainer(parsedData.args.id).start();
