@@ -229,16 +229,60 @@ deployForm.addEventListener('submit', async (e) => {
 
         // Wait for a specific response
         // Wait for the specific response
+        const successResponse = await waitForSpecificResponse("deployed successfully", 90000);
+
+        console.log('[INFO] Waiting for the deployment response...' + successResponse);
 
         console.log('[INFO] Deployment success:', successResponse);
         hideStatusIndicator();
         showAlert('success', successResponse.message);
+        startStatsInterval();
     } catch (error) {
         console.error('[ERROR] Failed to deploy container:', error.message);
         hideStatusIndicator();
         showAlert('danger', error.message);
     }
 });
+
+// Utility function to wait for a specific response
+function waitForSpecificResponse(expectedMessageFragment, timeout = 90000) {
+    return new Promise((resolve, reject) => {
+        const startTime = Date.now();
+
+        function handleResponse(event) {
+            const response = event.detail; // Extract the response data
+            console.log('[DEBUG] Received response:', response);
+
+            if (response?.success && response.message.includes(expectedMessageFragment)) {
+                console.log('[DEBUG] Expected response received:', response.message);
+                window.removeEventListener('responseReceived', handleResponse); // Remove listener
+                resolve(response); // Resolve with the response
+            }
+        }
+
+        // Timeout handler
+        const timeoutId = setTimeout(() => {
+            console.warn('[WARN] Timeout while waiting for the expected response.');
+            window.removeEventListener('responseReceived', handleResponse); // Cleanup
+            reject(new Error('Timeout waiting for the expected response'));
+        }, timeout);
+
+        // Attach listener
+        window.addEventListener('responseReceived', handleResponse);
+
+        // Ensure cleanup on successful resolution
+        const wrappedResolve = (response) => {
+            clearTimeout(timeoutId);
+            resolve(response);
+        };
+
+        // Replace `resolve` in `handleResponse` for proper cleanup
+        handleResponse.wrappedResolve = wrappedResolve;
+    });
+}
+
+
+
 // Initialize templates on load
 document.addEventListener('DOMContentLoaded', fetchTemplates);
 
