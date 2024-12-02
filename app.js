@@ -2,6 +2,7 @@ import Hyperswarm from 'hyperswarm';
 import b4a from 'b4a';
 import { startTerminal, appendTerminalOutput } from './libs/terminal.js';
 import { startDockerTerminal, cleanUpDockerTerminal } from './libs/dockerTerminal.js';
+import { fetchTemplates, displayTemplateList, openDeployModal } from './libs/templateDeploy.js';
 
 // DOM Elements
 const containerList = document.getElementById('container-list');
@@ -32,6 +33,16 @@ function stopStatsInterval() {
     console.log('[INFO] Stats interval stopped.');
   }
 }
+
+function closeAllModals() {
+  // Find and hide all open modals
+  const modals = document.querySelectorAll('.modal.show'); // Adjust selector if necessary
+  modals.forEach(modal => {
+    const modalInstance = bootstrap.Modal.getInstance(modal); // Get Bootstrap modal instance
+    modalInstance.hide(); // Close the modal
+  });
+}
+
 
 document.addEventListener('DOMContentLoaded', () => {
   const dockerTerminalModal = document.getElementById('dockerTerminalModal');
@@ -397,18 +408,30 @@ function addConnection(topicHex) {
   connectionItem.className = 'list-group-item d-flex align-items-center justify-content-between';
   connectionItem.dataset.topicId = topicId;
   connectionItem.innerHTML = `
-  <span>
-    <span class="connection-status status-disconnected"></span>${topicId}
-  </span>
-  <div class="btn-group">
-    <button class="btn btn-sm btn-primary docker-terminal-btn">
-      <i class="fas fa-terminal"></i>
-    </button>
-    <button class="btn btn-sm btn-danger disconnect-btn">
-      <i class="fas fa-plug"></i>
-    </button>
+  <div class="connection-item d-flex align-items-center justify-content-between p-2">
+    <div class="connection-info">
+      <span class="topic-id">${topicId}</span>
+      <span class="connection-status status-disconnected ms-2"></span>
+    </div><BR>
+    <div class="btn-group">
+      <button class="btn btn-sm btn-primary docker-terminal-btn" title="Open Terminal">
+        <i class="fas fa-terminal"></i>
+      </button>
+      <button class="btn btn-sm btn-secondary deploy-template-btn" title="Deploy Template">
+        <i class="fas fa-cubes"></i>
+      </button>
+      <button class="btn btn-sm btn-danger disconnect-btn" title="Disconnect">
+        <i class="fas fa-plug"></i>
+      </button>
+    </div>
   </div>
 `;
+  // Add event listener for "Deploy Template" button
+  connectionItem.querySelector('.deploy-template-btn').addEventListener('click', () => {
+    console.log(`[INFO] Opening template deploy modal for connection: ${topicId}`);
+    openTemplateDeployModal(topicId);
+  });
+
 
   // Add Docker Terminal button event listener
   connectionItem.querySelector('.docker-terminal-btn')?.addEventListener('click', (event) => {
@@ -493,6 +516,20 @@ function addConnection(topicHex) {
     collapseSidebarBtn.innerHTML = '&gt;';
     console.log('[DEBUG] Sidebar collapsed after adding connection');
   }
+}
+
+
+// Function to open the template deploy modal
+function openTemplateDeployModal(topicId) {
+  // Pass the topic ID or other connection-specific info if needed
+  console.log(`[INFO] Preparing template deploy modal for topic: ${topicId}`);
+
+  // Ensure the modal fetches templates
+  fetchTemplates(); // Refresh template list
+
+  // Show the modal
+  const templateDeployModal = new bootstrap.Modal(document.getElementById('templateDeployModal'));
+  templateDeployModal.show();
 }
 
 

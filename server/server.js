@@ -163,35 +163,35 @@ swarm.on('connection', (peer) => {
           break;
 
 
-          case 'logs':
-            console.log(`[INFO] Handling 'logs' command for container: ${parsedData.args.id}`);
-            const logsContainer = docker.getContainer(parsedData.args.id);
-            const logsStream = await logsContainer.logs({
-              stdout: true,
-              stderr: true,
-              tail: 100, // Fetch the last 100 log lines
-              follow: true, // Stream live logs
-            });
-          
-            logsStream.on('data', (chunk) => {
-              peer.write(
-                JSON.stringify({
-                  type: 'logs',
-                  data: chunk.toString('base64'), // Send base64 encoded logs
-                })
-              );
-            });
-          
-            logsStream.on('end', () => {
-              console.log(`[INFO] Log stream ended for container: ${parsedData.args.id}`);
-            });
-          
-            logsStream.on('error', (err) => {
-              console.error(`[ERROR] Log stream error for container ${parsedData.args.id}: ${err.message}`);
-              peer.write(JSON.stringify({ error: `Log stream error: ${err.message}` }));
-            });
-          
-            break;
+        case 'logs':
+          console.log(`[INFO] Handling 'logs' command for container: ${parsedData.args.id}`);
+          const logsContainer = docker.getContainer(parsedData.args.id);
+          const logsStream = await logsContainer.logs({
+            stdout: true,
+            stderr: true,
+            tail: 100, // Fetch the last 100 log lines
+            follow: true, // Stream live logs
+          });
+
+          logsStream.on('data', (chunk) => {
+            peer.write(
+              JSON.stringify({
+                type: 'logs',
+                data: chunk.toString('base64'), // Send base64 encoded logs
+              })
+            );
+          });
+
+          logsStream.on('end', () => {
+            console.log(`[INFO] Log stream ended for container: ${parsedData.args.id}`);
+          });
+
+          logsStream.on('error', (err) => {
+            console.error(`[ERROR] Log stream error for container ${parsedData.args.id}: ${err.message}`);
+            peer.write(JSON.stringify({ error: `Log stream error: ${err.message}` }));
+          });
+
+          break;
 
         case 'duplicateContainer':
           console.log('[INFO] Handling \'duplicateContainer\' command');
@@ -224,6 +224,106 @@ swarm.on('connection', (peer) => {
           await docker.getContainer(parsedData.args.id).remove({ force: true });
           response = { success: true, message: `Container ${parsedData.args.id} removed` };
           break;
+
+        case 'deployContainer':
+          console.log('[INFO] Handling "deployContainer" command');
+          const { image: imageToDeploy, ports = [], volumes = [], env = [] } = parsedData.args;
+
+          try {
+            // Validate and sanitize image
+            if (!imageToDeploy || typeof imageToDeploy !== 'string') {
+              throw new Error('Invalid or missing Docker image.');
+            }
+
+            // Validate and sanitize ports
+            const validPorts = ports.filter((port) => {
+              if (typeof port === 'string' && /^\d+\/(tcp|udp)$/.test(port)) {
+                return true;
+              } else {
+                console.warn(`[WARN] Invalid port entry skipped: ${port}`);
+                return false;
+              }
+            });
+
+            // Validate and sanitize volumes
+            const validVolumes = volumes.filter((volume) => {
+              if (typeof volume === 'string' && volume.includes(':')) {
+                return true;
+              } else {
+                console.warn(`[WARN] Invalid volume entry skipped: ${volume}`);
+                return false;
+              }
+            });
+
+            // Validate and sanitize environment variables
+            const validEnv = env.map(({ name, value }) => {
+              if (name && value) {
+                return `${name}=${value}`;
+              } else {
+                console.warn(`[WARN] Invalid environment variable skipped: name=${name}, value=${value}`);
+                return null;
+              }
+            }).filter(Boolean);
+
+            console.log(`[INFO] Pulling Docker image "${imageToDeploy}"`);
+
+            // Pull the Docker image
+            const pullStream = await docker.pull(imageToDeploy);
+            await new Promise((resolve, reject) => {
+              docker.modem.followProgress(pullStream, (err) => (err ? reject(err) : resolve()));
+            });
+
+            console.log(`[INFO] Image "${imageToDeploy}" pulled successfully`);
+
+            // Configure container creation settings
+            const hostConfig = {
+              PortBindings: {},
+              Binds: validVolumes, // Use validated volumes in Docker's expected format
+              NetworkMode: 'bridge', // Set the network mode to bridge
+            };
+            validPorts.forEach((port) => {
+              const [containerPort, protocol] = port.split('/');
+              hostConfig.PortBindings[`${containerPort}/${protocol}`] = [{ HostPort: containerPort }];
+            });
+
+            // Create and start the container
+            console.log('[INFO] Creating the container...');
+            const container = await docker.createContainer({
+              Image: imageToDeploy,
+              Env: validEnv,
+              HostConfig: hostConfig,
+            });
+
+            console.log('[INFO] Starting the container...');
+            await container.start();
+
+            console.log(`[INFO] Container deployed successfully from image "${imageToDeploy}"`);
+
+            // Respond with success message
+            peer.write(
+              JSON.stringify({
+                success: true,
+                message: `Container deployed successfully from image "${imageToDeploy}"`,
+              })
+            );
+
+            // Update all peers with the latest container list
+            const containers = await docker.listContainers({ all: true });
+            const update = { type: 'containers', data: containers };
+
+            for (const connectedPeer of connectedPeers) {
+              connectedPeer.write(JSON.stringify(update));
+            }
+          } catch (err) {
+            console.error(`[ERROR] Failed to deploy container: ${err.message}`);
+            peer.write(
+              JSON.stringify({
+                error: `Failed to deploy container: ${err.message}`,
+              })
+            );
+          }
+          break;
+
 
         case 'startTerminal':
           console.log(`[INFO] Starting terminal for container: ${parsedData.args.containerId}`);

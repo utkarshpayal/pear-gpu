@@ -545,6 +545,73 @@
   </div>
 </div>
 
+<!-- Search Input -->
+
+<!-- Deploy Modal -->
+<div class="modal fade" id="templateDeployModal" tabindex="-1" aria-labelledby="deployModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content bg-dark text-white">
+      <div class="modal-header">
+        <h5 class="modal-title" id="deploy-title"></h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <input type="text" id="template-search-input" class="form-control my-3" placeholder="Search templates...">
+        <ul id="template-list" class="list-group"></ul> 
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Template Deploy Modal -->
+<div class="modal fade" id="templateDeployModal" tabindex="-1" aria-labelledby="templateDeployModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content bg-dark text-white">
+      <div class="modal-header">
+        <h5 class="modal-title" id="templateDeployModalLabel">Deploy Template</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <input type="text" id="template-search-input" class="form-control mb-3" placeholder="Search templates...">
+        <ul id="template-list" class="list-group"></ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Deploy Template Modal -->
+<div class="modal fade" id="templateDeployModalUnique" tabindex="-1" aria-labelledby="templateDeployModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content bg-dark text-white">
+      <div class="modal-header">
+        <h5 class="modal-title" id="deploy-title">Deploy Template</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form id="deploy-form">
+          <div class="mb-3">
+            <label for="deploy-image" class="form-label">Image</label>
+            <input type="text" id="deploy-image" class="form-control" required />
+          </div>
+          <div class="mb-3">
+            <label for="deploy-ports" class="form-label">Ports</label>
+            <input type="text" id="deploy-ports" class="form-control" placeholder="e.g., 80/tcp, 443/tcp" />
+          </div>
+          <div class="mb-3">
+            <label for="deploy-volumes" class="form-label">Volumes</label>
+            <input type="text" id="deploy-volumes" class="form-control" placeholder="e.g., /host/path:/container/path" />
+          </div>
+          <div class="mb-3">
+            <label for="deploy-env" class="form-label">Environment Variables</label>
+            <div id="deploy-env"></div>
+          </div>
+          <button type="submit" class="btn btn-primary">Deploy</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
   <!-- Alert Container -->
   <div id="alert-container" class="position-fixed top-0 start-50 translate-middle-x mt-3"
     style="z-index: 1051; max-width: 90%;"></div>
