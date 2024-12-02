@@ -228,23 +228,23 @@ swarm.on('connection', (peer) => {
           case 'deployContainer':
             console.log('[INFO] Handling "deployContainer" command');
             const { containerName, image: imageToDeploy, ports = [], volumes = [], env = [] } = parsedData.args;
-          
+
             try {
               // Validate and sanitize container name
               if (!containerName || typeof containerName !== 'string') {
                 throw new Error('Invalid or missing container name.');
               }
-          
+
               // Ensure the name is alphanumeric with optional dashes/underscores
               if (!/^[a-zA-Z0-9-_]+$/.test(containerName)) {
                 throw new Error('Container name must be alphanumeric and may include dashes or underscores.');
               }
-          
+
               // Validate and sanitize image
               if (!imageToDeploy || typeof imageToDeploy !== 'string') {
                 throw new Error('Invalid or missing Docker image.');
               }
-          
+
               // Validate and sanitize ports
               const validPorts = ports.filter((port) => {
                 if (typeof port === 'string' && /^\d+\/(tcp|udp)$/.test(port)) {
@@ -254,7 +254,7 @@ swarm.on('connection', (peer) => {
                   return false;
                 }
               });
-          
+
               // Validate and sanitize volumes
               const validVolumes = volumes.filter((volume) => {
                 if (typeof volume === 'string' && volume.includes(':')) {
@@ -264,7 +264,7 @@ swarm.on('connection', (peer) => {
                   return false;
                 }
               });
-          
+
               // Validate and sanitize environment variables
               const validEnv = env
                 .map(({ name, value }) => {
@@ -276,17 +276,17 @@ swarm.on('connection', (peer) => {
                   }
                 })
                 .filter(Boolean);
-          
+
               console.log(`[INFO] Pulling Docker image "${imageToDeploy}"`);
-          
+
               // Pull the Docker image
               const pullStream = await docker.pull(imageToDeploy);
               await new Promise((resolve, reject) => {
                 docker.modem.followProgress(pullStream, (err) => (err ? reject(err) : resolve()));
               });
-          
+
               console.log(`[INFO] Image "${imageToDeploy}" pulled successfully`);
-          
+
               // Configure container creation settings
               const hostConfig = {
                 PortBindings: {},
@@ -297,7 +297,7 @@ swarm.on('connection', (peer) => {
                 const [containerPort, protocol] = port.split('/');
                 hostConfig.PortBindings[`${containerPort}/${protocol}`] = [{ HostPort: containerPort }];
               });
-          
+
               // Create and start the container with a custom name
               console.log('[INFO] Creating the container...');
               const container = await docker.createContainer({
@@ -306,12 +306,12 @@ swarm.on('connection', (peer) => {
                 Env: validEnv,
                 HostConfig: hostConfig,
               });
-          
+
               console.log('[INFO] Starting the container...');
               await container.start();
-          
+
               console.log(`[INFO] Container "${containerName}" deployed successfully from image "${imageToDeploy}"`);
-          
+
               // Respond with success message
               peer.write(
                 JSON.stringify({
@@ -319,11 +319,11 @@ swarm.on('connection', (peer) => {
                   message: `Container "${containerName}" deployed successfully from image "${imageToDeploy}"`,
                 })
               );
-          
+
               // Update all peers with the latest container list
               const containers = await docker.listContainers({ all: true });
               const update = { type: 'containers', data: containers };
-          
+
               for (const connectedPeer of connectedPeers) {
                 connectedPeer.write(JSON.stringify(update));
               }
@@ -336,7 +336,7 @@ swarm.on('connection', (peer) => {
               );
             }
             break;
-          
+
 
 
         case 'startTerminal':
