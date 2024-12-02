@@ -162,6 +162,37 @@ swarm.on('connection', (peer) => {
           }
           break;
 
+
+          case 'logs':
+            console.log(`[INFO] Handling 'logs' command for container: ${parsedData.args.id}`);
+            const logsContainer = docker.getContainer(parsedData.args.id);
+            const logsStream = await logsContainer.logs({
+              stdout: true,
+              stderr: true,
+              tail: 100, // Fetch the last 100 log lines
+              follow: true, // Stream live logs
+            });
+          
+            logsStream.on('data', (chunk) => {
+              peer.write(
+                JSON.stringify({
+                  type: 'logs',
+                  data: chunk.toString('base64'), // Send base64 encoded logs
+                })
+              );
+            });
+          
+            logsStream.on('end', () => {
+              console.log(`[INFO] Log stream ended for container: ${parsedData.args.id}`);
+            });
+          
+            logsStream.on('error', (err) => {
+              console.error(`[ERROR] Log stream error for container ${parsedData.args.id}: ${err.message}`);
+              peer.write(JSON.stringify({ error: `Log stream error: ${err.message}` }));
+            });
+          
+            break;
+
         case 'duplicateContainer':
           console.log('[INFO] Handling \'duplicateContainer\' command');
           const { name, image, hostname, netmode, cpu, memory, config: dupConfig } = parsedData.args;

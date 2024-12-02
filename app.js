@@ -338,6 +338,13 @@ function handlePeerData(data, topicId, peer) {
           window.inspectContainerCallback = null; // Reset the callback
         }
         break;
+      
+        case 'logs':
+        console.log('[INFO] Handling logs output...');
+        if (window.handleLogOutput) {
+          window.handleLogOutput(response);
+        }
+        break;
 
       default:
         console.warn(`[WARN] Unhandled response type: ${response.type}`);
@@ -403,40 +410,40 @@ function addConnection(topicHex) {
   </div>
 `;
 
-// Add Docker Terminal button event listener
-connectionItem.querySelector('.docker-terminal-btn')?.addEventListener('click', (event) => {
-  event.stopPropagation();
+  // Add Docker Terminal button event listener
+  connectionItem.querySelector('.docker-terminal-btn')?.addEventListener('click', (event) => {
+    event.stopPropagation();
 
-  console.log('[DEBUG] Docker terminal button clicked.');
+    console.log('[DEBUG] Docker terminal button clicked.');
 
-  if (!topicId) {
-    console.error('[ERROR] Missing topicId. Cannot proceed.');
-    return;
-  }
-
-  const connection = connections[topicId];
-  console.log(`[DEBUG] Retrieved connection for topicId: ${topicId}`, connection);
-
-  if (connection && connection.peer) {
-    try {
-      console.log(`[DEBUG] Starting Docker terminal for topicId: ${topicId}`);
-      startDockerTerminal(topicId, connection.peer);
-
-      const dockerTerminalModal = document.getElementById('dockerTerminalModal');
-      if (dockerTerminalModal) {
-        const modalInstance = new bootstrap.Modal(dockerTerminalModal);
-        modalInstance.show();
-        console.log('[DEBUG] Docker Terminal modal displayed.');
-      } else {
-        console.error('[ERROR] Docker Terminal modal not found in the DOM.');
-      }
-    } catch (error) {
-      console.error(`[ERROR] Failed to start Docker CLI terminal for topicId: ${topicId}`, error);
+    if (!topicId) {
+      console.error('[ERROR] Missing topicId. Cannot proceed.');
+      return;
     }
-  } else {
-    console.warn(`[WARNING] No active peer found for topicId: ${topicId}. Unable to start Docker CLI terminal.`);
-  }
-});
+
+    const connection = connections[topicId];
+    console.log(`[DEBUG] Retrieved connection for topicId: ${topicId}`, connection);
+
+    if (connection && connection.peer) {
+      try {
+        console.log(`[DEBUG] Starting Docker terminal for topicId: ${topicId}`);
+        startDockerTerminal(topicId, connection.peer);
+
+        const dockerTerminalModal = document.getElementById('dockerTerminalModal');
+        if (dockerTerminalModal) {
+          const modalInstance = new bootstrap.Modal(dockerTerminalModal);
+          modalInstance.show();
+          console.log('[DEBUG] Docker Terminal modal displayed.');
+        } else {
+          console.error('[ERROR] Docker Terminal modal not found in the DOM.');
+        }
+      } catch (error) {
+        console.error(`[ERROR] Failed to start Docker CLI terminal for topicId: ${topicId}`, error);
+      }
+    } else {
+      console.warn(`[WARNING] No active peer found for topicId: ${topicId}. Unable to start Docker CLI terminal.`);
+    }
+  });
 
 
   connectionItem.querySelector('span').addEventListener('click', () => switchConnection(topicId));
@@ -640,7 +647,7 @@ function switchConnection(topicId) {
   resetContainerList();
 
   console.log(`[INFO] Switched to connection: ${topicId}`);
-  
+
   // Start the stats interval
   startStatsInterval();
 
@@ -688,33 +695,37 @@ function renderContainers(containers, topicId) {
     const row = document.createElement('tr');
     row.dataset.containerId = containerId; // Store container ID for reference
     row.innerHTML = `
-      <td>${name}</td>
-      <td>${image}</td>
-      <td>${container.State || 'Unknown'}</td>
-      <td class="cpu">0</td>
-      <td class="memory">0</td>
-      <td class="ip-address">${ipAddress}</td>
-      <td>
-        <button class="btn btn-success btn-sm action-start" ${container.State === 'running' ? 'disabled' : ''}>
-          <i class="fas fa-play"></i>
-        </button>
-        <button class="btn btn-info btn-sm action-restart" ${container.State !== 'running' ? 'disabled' : ''}>
-          <i class="fas fa-redo"></i>
-        </button>
-        <button class="btn btn-warning btn-sm action-stop" ${container.State !== 'running' ? 'disabled' : ''}>
-          <i class="fas fa-stop"></i>
-        </button>
-        <button class="btn btn-danger btn-sm action-remove">
-          <i class="fas fa-trash"></i>
-        </button>
-        <button class="btn btn-primary btn-sm action-terminal" ${container.State !== 'running' ? 'disabled' : ''}>
-          <i class="fas fa-terminal"></i>
-        </button>
-        <button class="btn btn-secondary btn-sm action-duplicate">
-          <i class="fas fa-clone"></i>
-        </button>
-      </td>
-    `;
+  <td>${name}</td>
+  <td>${image}</td>
+  <td>${container.State || 'Unknown'}</td>
+  <td class="cpu">0</td>
+  <td class="memory">0</td>
+  <td class="ip-address">${ipAddress}</td>
+  <td>
+    <button class="btn btn-success btn-sm action-start" ${container.State === 'running' ? 'disabled' : ''}>
+      <i class="fas fa-play"></i>
+    </button>
+    <button class="btn btn-info btn-sm action-restart" ${container.State !== 'running' ? 'disabled' : ''}>
+      <i class="fas fa-redo"></i>
+    </button>
+    <button class="btn btn-warning btn-sm action-stop" ${container.State !== 'running' ? 'disabled' : ''}>
+      <i class="fas fa-stop"></i>
+    </button>
+    <button class="btn btn-dark btn-sm action-logs">
+      <i class="fas fa-binoculars"></i>
+    </button>
+    <button class="btn btn-danger btn-sm action-remove">
+      <i class="fas fa-trash"></i>
+    </button>
+    <button class="btn btn-primary btn-sm action-terminal" ${container.State !== 'running' ? 'disabled' : ''}>
+      <i class="fas fa-terminal"></i>
+    </button>
+    <button class="btn btn-secondary btn-sm action-duplicate">
+      <i class="fas fa-clone"></i>
+    </button>
+
+  </td>
+`;
     containerList.appendChild(row);
     // Add event listener for duplicate button
     const duplicateBtn = row.querySelector('.action-duplicate');
@@ -737,18 +748,18 @@ function addActionListeners(row, container) {
   startBtn.addEventListener('click', async () => {
     showStatusIndicator(`Starting container "${container.Names[0]}"...`);
     sendCommand('startContainer', { id: container.Id });
-  
+
     const expectedMessageFragment = `Container ${container.Id} started`;
-  
+
     try {
       const response = await waitForPeerResponse(expectedMessageFragment);
       console.log('[DEBUG] Start container response:', response);
-  
+
       showAlert('success', response.message);
-  
+
       // Refresh the container list to update states
       sendCommand('listContainers');
-  
+
       // Restart stats interval
       startStatsInterval();
     } catch (error) {
@@ -759,23 +770,23 @@ function addActionListeners(row, container) {
       hideStatusIndicator();
     }
   });
-  
+
 
   stopBtn.addEventListener('click', async () => {
     showStatusIndicator(`Stopping container "${container.Names[0]}"...`);
     sendCommand('stopContainer', { id: container.Id });
-  
+
     const expectedMessageFragment = `Container ${container.Id} stopped`;
-  
+
     try {
       const response = await waitForPeerResponse(expectedMessageFragment);
       console.log('[DEBUG] Stop container response:', response);
-  
+
       showAlert('success', response.message);
-  
+
       // Refresh the container list to update states
       sendCommand('listContainers');
-  
+
       // Restart stats interval
       startStatsInterval();
     } catch (error) {
@@ -786,7 +797,7 @@ function addActionListeners(row, container) {
       hideStatusIndicator();
     }
   });
-  
+
 
 
   // Restart Button
@@ -813,6 +824,35 @@ function addActionListeners(row, container) {
     }
   });
 
+  const logsBtn = row.querySelector('.action-logs');
+  logsBtn.addEventListener('click', () => openLogModal(container.Id));
+
+  function openLogModal(containerId) {
+    console.log(`[INFO] Opening logs modal for container: ${containerId}`);
+
+    const modal = new bootstrap.Modal(document.getElementById('logsModal'));
+    const logContainer = document.getElementById('logs-container');
+
+    // Clear any existing logs
+    logContainer.innerHTML = '';
+
+    // Request previous logs
+    sendCommand('logs', { id: containerId });
+
+    // Listen for logs
+    window.handleLogOutput = (logData) => {
+      const logLine = atob(logData.data); // Decode base64 logs
+      const logElement = document.createElement('pre');
+      logElement.textContent = logLine;
+      logContainer.appendChild(logElement);
+
+      // Scroll to the bottom
+      logContainer.scrollTop = logContainer.scrollHeight;
+    };
+
+    // Show the modal
+    modal.show();
+  }
 
   // Remove Button
   removeBtn.addEventListener('click', async () => {

@@ -531,6 +531,20 @@
   </div>
 </div>
 
+<div class="modal fade" id="logsModal" tabindex="-1" aria-labelledby="logsModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content bg-dark text-white">
+      <div class="modal-header">
+        <h5 class="modal-title" id="logsModalLabel">Container Logs</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div id="logs-container" style="max-height: 70vh; overflow-y: auto; font-family: monospace; background: black; padding: 10px;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
   <!-- Alert Container -->
   <div id="alert-container" class="position-fixed top-0 start-50 translate-middle-x mt-3"
     style="z-index: 1051; max-width: 90%;"></div>
