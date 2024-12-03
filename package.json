@@ -1,8 +1,8 @@
 {
-  "name": "peartainer",
+  "name": "peardock",
   "main": "index.html",
   "pear": {
-    "name": "peartainer",
+    "name": "peardock",
     "type": "desktop",
     "gui": {
       "backgroundColor": "#1F2430",
