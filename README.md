@@ -393,12 +393,6 @@ Contributions are welcome! Fork the repository, make your changes, and submit a 
 
 ---
 
-## License
-
-Peartainer is released under the [MIT License](LICENSE).
-
----
-
 ## Acknowledgments
 
 - **Portainer**: For inspiring the creation of a powerful Docker management tool.
