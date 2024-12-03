@@ -249,7 +249,7 @@ The server interacts with Docker using **Dockerode**:
 
 ### Welcome Screen
 
-![Welcome Screen](https://git.ssh.surf/snxraven/peartainer/src/branch/main/screenshots/screenshot-0.png)
+![Welcome Screen](https://git.ssh.surf/snxraven/peartainer/raw/branch/main/screenshots/screenshot-0.png)
 
 *The initial welcome screen guiding users to add a connection.*
 
@@ -257,7 +257,7 @@ The server interacts with Docker using **Dockerode**:
 
 ### Container List
 
-![Container List](https://git.ssh.surf/snxraven/peartainer/src/branch/main/screenshots/screenshot-1.png)
+![Container List](https://git.ssh.surf/snxraven/peartainer/raw/branch/main/screenshots/screenshot-1.png)
 
 *Displaying all Docker containers with real-time stats and action buttons.*
 
@@ -265,7 +265,7 @@ The server interacts with Docker using **Dockerode**:
 
 ### Template Deployments
 
-![Template Deployments](https://git.ssh.surf/snxraven/peartainer/src/branch/main/screenshots/screenshot-2.png)
+![Template Deployments](https://git.ssh.surf/snxraven/peartainer/raw/branch/main/screenshots/screenshot-2.png)
 
 *Browsing and selecting templates for deployment from a remote repository.*
 
@@ -273,7 +273,7 @@ The server interacts with Docker using **Dockerode**:
 
 ### Final Deploy Modal
 
-![Final Deploy Modal](https://git.ssh.surf/snxraven/peartainer/src/branch/main/screenshots/screenshot-3.png)
+![Final Deploy Modal](https://git.ssh.surf/snxraven/peartainer/raw/branch/main/screenshots/screenshot-3.png)
 
 *Customizing deployment parameters before launching a new container.*
 
@@ -281,7 +281,7 @@ The server interacts with Docker using **Dockerode**:
 
 ### Duplicate Container Form
 
-![Duplicate Container Form](https://git.ssh.surf/snxraven/peartainer/src/branch/main/screenshots/screenshot-4.png)
+![Duplicate Container Form](https://git.ssh.surf/snxraven/peartainer/raw/branch/main/screenshots/screenshot-4.png)
 
 *Duplicating an existing container with options to modify configurations.*
 
@@ -289,7 +289,7 @@ The server interacts with Docker using **Dockerode**:
 
 ### Container Logs
 
-![Container Logs](https://git.ssh.surf/snxraven/peartainer/src/branch/main/screenshots/screenshot-5.png)
+![Container Logs](https://git.ssh.surf/snxraven/peartainer/raw/branch/main/screenshots/screenshot-5.png)
 
 *Viewing real-time logs of a container directly from the UI.*
 
