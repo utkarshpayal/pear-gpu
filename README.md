@@ -1,8 +1,8 @@
-# peardock
+# Hackwith55
 
 ## Overview
 
-peardock is a decentralized, peer-to-peer application designed to streamline Docker container management using Hyperswarm. The application connects multiple peers over a distributed hash table (DHT) network and provides full control over Docker containers, including starting, stopping, removing, duplicating, viewing logs, deploying from templates, and monitoring real-time metrics. With its robust server key-based architecture, peardock ensures secure and persistent peer-to-peer communication.
+This is a decentralized, peer-to-peer application designed to streamline Docker container management using Hyperswarm. The application connects multiple peers over a distributed hash table (DHT) network and provides full control over Docker containers, including starting, stopping, removing, duplicating, viewing logs, deploying from templates, and monitoring real-time metrics. With its robust server key-based architecture, peardock ensures secure and persistent peer-to-peer communication.
 
 The **server key** forms the foundation of the connection. It is automatically generated, saved, and reused unless explicitly refreshed, making it easy to maintain consistent access while allowing for manual key regeneration when needed.
 
@@ -249,7 +249,6 @@ The server interacts with Docker using **Dockerode**:
 
 ### Welcome Screen
 
-![Welcome Screen](https://git.ssh.surf/snxraven/peardock/raw/branch/main/screenshots/screenshot-0.png)
 
 *The initial welcome screen guiding users to add a connection.*
 
@@ -257,7 +256,7 @@ The server interacts with Docker using **Dockerode**:
 
 ### Container List
 
-![Container List](https://git.ssh.surf/snxraven/peardock/raw/branch/main/screenshots/screenshot-1.png)
+
 
 *Displaying all Docker containers with real-time stats and action buttons.*
 
@@ -265,7 +264,7 @@ The server interacts with Docker using **Dockerode**:
 
 ### Template Deployments
 
-![Template Deployments](https://git.ssh.surf/snxraven/peardock/raw/branch/main/screenshots/screenshot-2.png)
+
 
 *Browsing and selecting templates for deployment from a remote repository.*
 
@@ -273,7 +272,7 @@ The server interacts with Docker using **Dockerode**:
 
 ### Final Deploy Modal
 
-![Final Deploy Modal](https://git.ssh.surf/snxraven/peardock/raw/branch/main/screenshots/screenshot-3.png)
+
 
 *Customizing deployment parameters before launching a new container.*
 
@@ -281,7 +280,6 @@ The server interacts with Docker using **Dockerode**:
 
 ### Duplicate Container Form
 
-![Duplicate Container Form](https://git.ssh.surf/snxraven/peardock/raw/branch/main/screenshots/screenshot-4.png)
 
 *Duplicating an existing container with options to modify configurations.*
 
@@ -289,7 +287,7 @@ The server interacts with Docker using **Dockerode**:
 
 ### Container Logs
 
-![Container Logs](https://git.ssh.surf/snxraven/peardock/raw/branch/main/screenshots/screenshot-5.png)
+
 
 *Viewing real-time logs of a container directly from the UI.*
 
@@ -369,7 +367,7 @@ Contributions are welcome! Fork the repository, make your changes, and submit a 
 
 2. **Clone Your Fork**:
    ```bash
-   git clone https://github.com/your-username/peardock.git
+   git clone https://github.com/your-username/project-name.git
    ```
 
 3. **Create a Branch for Your Feature**:
@@ -403,4 +401,3 @@ Contributions are welcome! Fork the repository, make your changes, and submit a 
 
 ## Contact
 
-For questions, issues, or suggestions, please open an issue on the [GitHub repository](https://git.ssh.surf/snxraven/peardock).

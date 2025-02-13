@@ -196,7 +196,7 @@ function toggleResetButtonVisibility() {
 // Add Reset Connections Button
 const resetConnectionsBtn = document.createElement('button');
 resetConnectionsBtn.textContent = 'Reset Connections';
-resetConnectionsBtn.className = 'btn btn-danger w-100 mt-2';
+resetConnectionsBtn.className = 'btn btn-danger w-100 mt-2 ml-2 mr-2 ';
 resetConnectionsBtn.addEventListener('click', () => {
   console.log('[INFO] Resetting connections and clearing cookies.');
   Object.keys(connections).forEach((topicId) => {
@@ -345,6 +345,7 @@ function handlePeerData(data, topicId, peer) {
 
       case 'containerConfig':
         console.log('[INFO] Handling container configuration...');
+        response.data.config.Tty = true;
         if (window.inspectContainerCallback) {
           window.inspectContainerCallback(response.data);
           window.inspectContainerCallback = null; // Reset the callback
@@ -409,7 +410,7 @@ function addConnection(topicHex) {
   connectionItem.className = 'list-group-item d-flex align-items-center justify-content-between';
   connectionItem.dataset.topicId = topicId;
   connectionItem.innerHTML = `
-  <div class="connection-item row align-items-center px-2 py-1 border-bottom bg-dark text-light">
+  <div class="connection-item row align-items-center  py-1 border-bottom bg-dark text-light">
     <!-- Connection Info -->
     <div class="col-8 connection-info text-truncate">
     	        <span>
@@ -738,7 +739,7 @@ function renderContainers(containers, topicId) {
     const row = document.createElement('tr');
     row.dataset.containerId = containerId; // Store container ID for reference
     row.innerHTML = `
-    <td>${name}</td>
+    <td class="name-column">${name}</td>
     <td>${image}</td>
     <td>${container.State || 'Unknown'}</td>
     <td class="cpu">0</td>

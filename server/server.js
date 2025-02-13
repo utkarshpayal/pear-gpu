@@ -8,10 +8,11 @@ import os from "os";
 import fs from 'fs';
 import dotenv from 'dotenv';
 import { spawn } from 'child_process';
+import fetch from 'node-fetch';
 
 // Load environment variables from .env file
 dotenv.config();
-
+ let gpuId;
 const docker = new Docker({
   socketPath: os.platform() === "win32" ? '//./pipe/dockerDesktopLinuxEngine' : '/var/run/docker.sock',
 });
@@ -25,15 +26,82 @@ function generateNewKey() {
   fs.appendFileSync('.env', `SERVER_KEY=${newKey.toString('hex')}\n`, { flag: 'a' });
   return newKey;
 }
+const args = process.argv.slice(2);
+let start = false; // Initially false, will be set to true based on condition 
+const timeArgIndex = args.findIndex(arg => arg === '--time');
+const isNewKey = args.includes('--new');
+let timeInSeconds = 0;
 
-// Load or generate the topic key
-let keyHex = process.env.SERVER_KEY;
-if (!keyHex) {
-  console.log('[INFO] No SERVER_KEY found in .env. Generating a new one...');
+if (timeArgIndex !== -1 && args[timeArgIndex + 1]) {
+  timeInSeconds = parseInt(args[timeArgIndex + 1], 10);
+
+  if (isNaN(timeInSeconds) || timeInSeconds <= 0) {
+    console.log('[ERROR] Invalid time argument. Please provide a valid number in seconds.');
+    process.exit(1);
+  }
+}
+
+const startTimer = () => {
+  if (start) {
+    console.log(`[INFO] Timer started. Server will shut down in ${timeInSeconds} seconds.`);
+
+    setTimeout(() => {
+      console.log('[INFO] Time limit reached. Shutting down server.');
+      swarm.destroy();
+      process.exit(0);
+    }, timeInSeconds * 1000);
+  }
+};
+
+
+
+
+let keyHex;
+if (isNewKey) {
   const newKey = generateNewKey();
   keyHex = newKey.toString('hex');
+
+  if (fs.existsSync('.env')) {
+    console.log('[INFO] Updating existing SERVER_KEY in .env...');
+    const envContent = fs.readFileSync('.env', 'utf8');
+    const updatedEnv = envContent
+    .split('\n') 
+    .filter((line) => !line.startsWith('SERVER_KEY=')) 
+    .concat(`SERVER_KEY=${keyHex}`) 
+    .join('\n') 
+    .trim(); 
+  fs.writeFileSync('.env', `${updatedEnv}\n`);
+  } else {
+    console.log('[INFO] .env file not found. Creating a new one...');
+    fs.writeFileSync('.env', `SERVER_KEY=${keyHex}\n`);
+  }
+
+  console.log('[INFO] New SERVER_KEY saved to .env.');
 } else {
-  console.log('[INFO] SERVER_KEY loaded from .env.');
+  keyHex = process.env.SERVER_KEY;
+
+  if (!keyHex) {
+    console.log('[INFO] No SERVER_KEY found in .env. Generating a new one...');
+    const newKey = generateNewKey();
+    keyHex = newKey.toString('hex');
+
+    if (fs.existsSync('.env')) {
+      const envContent = fs.readFileSync('.env', 'utf8');
+
+      // Replace SERVER_KEY if it exists, or add it if it doesn't
+      const updatedEnv = envContent.includes('SERVER_KEY=')
+        ? envContent.replace(/SERVER_KEY=.*/, `SERVER_KEY=${keyHex}`)
+        : `${envContent.trim()}\nSERVER_KEY=${keyHex}\n`;
+
+      fs.writeFileSync('.env', updatedEnv);
+    } else {
+      fs.writeFileSync('.env', `SERVER_KEY=${keyHex}\n`);
+    }
+
+    console.log('[INFO] New SERVER_KEY saved to .env.');
+  } else {
+    console.log('[INFO] SERVER_KEY loaded from .env.');
+  }
 }
 
 // Convert the keyHex to a Buffer
@@ -41,14 +109,80 @@ const topic = Buffer.from(keyHex, 'hex');
 
 console.log(`[INFO] Server started with topic: ${topic.toString('hex')}`);
 
+const fetchGpus = async () => {
+  try {
+    const response = await fetch("http://localhost:8282/gpus");
+
+    // Check if the response is successful (status 200-299)
+    if (!response.ok) {
+      throw new Error("Failed to fetch GPUs");
+    }
+
+    const data = await response.json();
+     const gpu = data.find(gpu => gpu.key === `${topic.toString('hex')}`);
+     gpuId = gpu.id;
+    console.log("gpu", gpu);
+      } catch (err) {
+    console.log(err);
+  } 
+};
+
+fetchGpus();
+// Function to add connection time to the database
+// Function to add connection time to a specific GPU in the database
+const addConnectionTimeToGpu = async (gpuId, peerId, connectionTime) => {
+  console.log(gpuId,peerId.toString('hex'),connectionTime)
+  try {
+    const response = await fetch(`http://localhost:8282/gpus/${gpuId}/connection-time`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        peerId: peerId.toString('hex'),
+        connectionTime: connectionTime,
+      }),
+    });
+console.log(response,'response')
+    if (!response.ok) {
+      throw new Error('Failed to save connection time');
+    }
+
+    const result = await response.json();
+    console.log(result)
+    console.log('Connection time saved:', result);
+  } catch (err) {
+    console.error('Error saving connection time:', err);
+  }
+};
+
+// Handle incoming peer connections
+swarm.on('connection', (peer) => {
+  console.log('[INFO] Peer connected');
+
+  
+  startTimer();
+  // Start timer or any additional logic for the connection
+  start = true;
+  connectedPeers.add(peer);
+  startTimer();
+});
+
 // Start listening or further implementation logic here
 // Join the swarm with the generated topic
 swarm.join(topic, { server: true, client: false });
 
 // Handle incoming peer connections
 swarm.on('connection', (peer) => {
+  const connectionTime = new Date().toISOString(); // Capture the connection time
   console.log('[INFO] Peer connected');
+  start = true;
+
   connectedPeers.add(peer);
+  
+  // Assuming you have the GPU ID available (from your logic)
+  addConnectionTimeToGpu(gpuId, peer.publicKey, connectionTime);  startTimer();
+
 
   peer.on('data', async (data) => {
     try {
@@ -202,6 +336,7 @@ swarm.on('connection', (peer) => {
           await duplicateContainer(name, image, hostname, netmode, cpu, memoryInMB, dupConfig, peer);
           return; // Response is handled within the duplicateContainer function
         case 'startContainer':
+          console.log(`${JSON.stringify(response)}`, "manju")
           console.log(`[INFO] Handling 'startContainer' command for container: ${parsedData.args.id}`);
           await docker.getContainer(parsedData.args.id).start();
           response = { success: true, message: `Container ${parsedData.args.id} started` };
@@ -536,14 +671,48 @@ docker.listContainers({ all: true }, async (err, containers) => {
 
 // Function to calculate CPU usage percentage
 function calculateCPUPercent(stats) {
-  const cpuDelta = stats.cpu_stats.cpu_usage.total_usage - stats.precpu_stats.cpu_usage.total_usage;
-  const systemDelta = stats.cpu_stats.system_cpu_usage - stats.precpu_stats.system_cpu_usage;
-  const cpuCount = stats.cpu_stats.online_cpus || stats.cpu_stats.cpu_usage.percpu_usage.length;
-  if (systemDelta > 0.0 && cpuDelta > 0.0) {
-    return (cpuDelta / systemDelta) * cpuCount * 100.0;
+  try {
+    if (!stats || typeof stats !== 'object') {
+      throw new Error('Invalid stats object');
+    }
+
+    const cpuDelta = 
+      stats?.cpu_stats?.cpu_usage?.total_usage - 
+      stats?.precpu_stats?.cpu_usage?.total_usage;
+
+    const systemDelta = 
+      (stats?.cpu_stats?.system_cpu_usage || 0) - 
+      (stats?.precpu_stats?.system_cpu_usage || 0);
+
+    const cpuCount = 
+      stats?.cpu_stats?.online_cpus || 
+      stats?.cpu_stats?.cpu_usage?.percpu_usage?.length || 
+      0;
+
+    if (!Number.isFinite(cpuDelta)) {
+      throw new Error('Invalid CPU delta');
+    }
+
+    if (!Number.isFinite(systemDelta)) {
+      throw new Error('Invalid system delta');
+    }
+
+    if (cpuCount === 0) {
+      // console.warn('[WARNING] CPU count is zero or undefined.');
+      return 0.0;
+    }
+
+    if (systemDelta > 0 && cpuDelta > 0) {
+      return (cpuDelta / systemDelta) * cpuCount * 100.0;
+    }
+
+    return 0.0;
+  } catch (err) {
+    console.error(`[ERROR] Failed to calculate CPU percent: ${err.message}`);
+    return 0.0;
   }
-  return 0.0;
 }
+
 
 // Function to handle terminal sessions
 // Function to handle terminal sessions
@@ -682,29 +851,41 @@ async function initializeContainerStats(containerInfo) {
 
   // Start streaming stats for the container
   try {
-    const statsStream = await container.stats({ stream: true });
+    const statsStream = await container?.stats?.({ stream: true });
+    
+    if (!statsStream) {
+      console.error(`[ERROR] Stats stream is undefined or null for container ${containerInfo?.Id || 'unknown'}`);
+      return statsData;
+    }
+  
     statsStream.on('data', (data) => {
       try {
-        const stats = JSON.parse(data.toString());
-        statsData.cpu = calculateCPUPercent(stats);
-        statsData.memory = stats.memory_stats.usage || 0;
+        const dataString = data?.toString();
+        if (!dataString) {
+          console.warn(`[WARNING] Received null or undefined data for container ${containerInfo?.Id || 'unknown'}`);
+          return;
+        }
+        const stats = JSON.parse(dataString);  
+        statsData.cpu = calculateCPUPercent(stats) || 0; // Fallback to 0 if undefined
+        statsData.memory = stats?.memory_stats?.usage || 0; // Fallback to 0 if undefined
       } catch (err) {
-        console.error(`[ERROR] Failed to parse stats for container ${containerInfo.Id}: ${err.message}`);
+        console.error(`[ERROR] Failed to parse stats for container ${containerInfo?.Id || 'unknown'}: ${err.message}`);
       }
     });
-
+  
     statsStream.on('error', (err) => {
-      console.error(`[ERROR] Stats stream error for container ${containerInfo.Id}: ${err.message}`);
+      console.error(`[ERROR] Stats stream error for container ${containerInfo?.Id || 'unknown'}: ${err?.message || 'No message'}`);
     });
-
+  
     statsStream.on('close', () => {
-      console.log(`[INFO] Stats stream closed for container ${containerInfo.Id}`);
+      console.log(`[INFO] Stats stream closed for container ${containerInfo?.Id || 'unknown'}`);
     });
   } catch (err) {
-    console.error(`[ERROR] Failed to start stats stream for container ${containerInfo.Id}: ${err.message}`);
+    console.error(`[ERROR] Failed to start stats stream for container ${containerInfo?.Id || 'unknown'}: ${err?.message || 'No message'}`);
   }
-
+  
   return statsData;
+  
 }
 
 async function handleStatsBroadcast() {
@@ -730,6 +911,7 @@ handleStatsBroadcast();
 // Handle process termination
 process.on('SIGINT', () => {
   console.log('[INFO] Server shutting down');
+  
   swarm.destroy();
   process.exit();
 });
