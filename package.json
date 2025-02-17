@@ -33,6 +33,7 @@
     "dockerode": "^4.0.2",
     "dotenv": "^16.4.5",
     "hyperswarm": "^4.8.4",
+    "jsonwebtoken": "^9.0.2",
     "node-fetch": "^3.3.2",
     "stream": "^0.0.3",
     "util": "^0.12.5",

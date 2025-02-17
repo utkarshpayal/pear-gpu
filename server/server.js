@@ -9,7 +9,7 @@ import fs from 'fs';
 import dotenv from 'dotenv';
 import { spawn } from 'child_process';
 import fetch from 'node-fetch';
-
+import jwt from 'jsonwebtoken';
 // Load environment variables from .env file
 dotenv.config();
  let gpuId;
@@ -29,6 +29,7 @@ function generateNewKey() {
 const args = process.argv.slice(2);
 let start = false; // Initially false, will be set to true based on condition 
 const timeArgIndex = args.findIndex(arg => arg === '--time');
+console.log("time ", timeArgIndex)
 const isNewKey = args.includes('--new');
 let timeInSeconds = 0;
 
@@ -107,7 +108,36 @@ if (isNewKey) {
 // Convert the keyHex to a Buffer
 const topic = Buffer.from(keyHex, 'hex');
 
-console.log(`[INFO] Server started with topic: ${topic.toString('hex')}`);
+const key = `${topic.toString('hex')}`;
+const generateToken = (key) => {
+  const payload = {
+    key,
+    timeInSeconds
+  };
+  
+  // Generate and return the token
+  return jwt.sign(payload, 'secret', { expiresIn: '1h' });  
+}
+const hexcode = generateToken(key);
+const response = await fetch("http://localhost:8282/add-gpu", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    hexcode: hexcode,
+  }),
+  
+}
+)
+
+
+const responseData = await response.json(); // Await the response data here
+console.log("Click on this link to add GPU", responseData.url)
+
+
+console.log(`[INFO] Server started `);
+  // with topic: ${topic.toString('hex')}`);
 
 const fetchGpus = async () => {
   try {
@@ -121,13 +151,34 @@ const fetchGpus = async () => {
     const data = await response.json();
      const gpu = data.find(gpu => gpu.key === `${topic.toString('hex')}`);
      gpuId = gpu.id;
-    console.log("gpu", gpu);
       } catch (err) {
     console.log(err);
   } 
 };
 
 fetchGpus();
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 // Function to add connection time to the database
 // Function to add connection time to a specific GPU in the database
 const addConnectionTimeToGpu = async (gpuId, peerId, connectionTime) => {
@@ -143,13 +194,11 @@ const addConnectionTimeToGpu = async (gpuId, peerId, connectionTime) => {
         connectionTime: connectionTime,
       }),
     });
-console.log(response,'response')
     if (!response.ok) {
       throw new Error('Failed to save connection time');
     }
 
     const result = await response.json();
-    console.log(result)
     console.log('Connection time saved:', result);
   } catch (err) {
     console.error('Error saving connection time:', err);
