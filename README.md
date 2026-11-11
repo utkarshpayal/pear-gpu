@@ -1,403 +1,125 @@
-# Hackwith55
+# pear-gpu
 
-## Overview
+A peer-to-peer Docker/GPU host manager built on [Pear](https://docs.pears.com/) and
+[Hyperswarm](https://github.com/holepunchto/hyperswarm). It is based on **peardock** (the
+`package.json` name is still `peardock`) and extends it with hooks into a GPU registry service so
+that a host's GPU usage sessions can be tracked and time-limited.
 
-This is a decentralized, peer-to-peer application designed to streamline Docker container management using Hyperswarm. The application connects multiple peers over a distributed hash table (DHT) network and provides full control over Docker containers, including starting, stopping, removing, duplicating, viewing logs, deploying from templates, and monitoring real-time metrics. With its robust server key-based architecture, peardock ensures secure and persistent peer-to-peer communication.
+There are two parts:
 
-The **server key** forms the foundation of the connection. It is automatically generated, saved, and reused unless explicitly refreshed, making it easy to maintain consistent access while allowing for manual key regeneration when needed.
+- **Server** (`server/server.js`) — a Node.js process that runs on the machine with Docker (and the GPU). It joins a Hyperswarm topic derived from a `SERVER_KEY` and executes Docker commands received from connected peers via [Dockerode](https://github.com/apocas/dockerode).
+- **Client** (`index.html`, `app.js`, `libs/`) — a Pear desktop app that connects to a server by its key and provides the UI.
 
-In addition to a development environment, the client app can be run in **production mode** directly via Pear with the following command:
+No central server is needed for the peer connection itself; peers find each other through the Hyperswarm DHT.
 
-```bash
-pear run pear://7to8bzrk53ab5ufwauqcw57s1kxmuykc9b8cdnjicaqcgoefa4wo
-```
+## Features
 
----
+### Server
 
-## Key Features
+- **Persistent server key** — on first run a 32-byte `SERVER_KEY` is generated and saved to `.env`, then reused. Pass `--new` to rotate it.
+- **Session time limit** — `--time <seconds>` shuts the server down that many seconds after a peer connects.
+- **GPU registry integration** — on start it looks up its GPU record (matched by server key) from a registry API on `localhost:8282` (`GET /gpus`) and records each peer connection with `POST /gpus/:id/connection-time`. The registry service is not part of this repo (needs confirmation which project provides it).
+- **Docker management** over the peer connection: list, inspect, start, stop, restart, remove, duplicate (with custom CPU, memory, network mode and hostname) and deploy containers.
+- **Terminals** — interactive shell sessions inside containers, plus a Docker CLI terminal on the host.
+- **Logs and live stats** — container logs and streamed CPU / memory / network stats.
 
-### Server-Side
+Commands are JSON messages of the form `{ command, args }`. Supported commands in `server/server.js`: `listContainers`, `inspectContainer`, `dockerCommand`, `logs`, `duplicateContainer`, `startContainer`, `stopContainer`, `restartContainer`, `removeContainer`, `deployContainer`, `startTerminal`, `killTerminal`.
 
-- **Persistent Server Key**:
-  - Generates a `SERVER_KEY` for each instance.
-  - The key is saved to `.env` for consistent re-use.
-  - Supports manual key regeneration by deleting `.env`.
+### Client
 
-- **Real-Time Docker Management**:
-  - List all containers across peers with statuses.
-  - Start, stop, restart, and remove containers remotely.
+- Bootstrap UI with an [xterm.js](https://xtermjs.org/) terminal viewer (`libs/terminal.js`, `libs/dockerTerminal.js`).
+- Real-time per-container stats and logs.
+- Template deployment wizard (`libs/templateDeploy.js`) using the public [Lissy93/portainer-templates](https://github.com/Lissy93/portainer-templates) list; ports, volumes and environment variables can be customised before deploying.
 
-- **Dynamic Terminal Sessions**:
-  - Open and manage multiple terminals for running containers.
-  - Real-time shell sessions streamed to connected peers.
+## Tech stack
 
-- **Docker CLI Terminal**:
-  - Access a Docker CLI terminal to run Docker commands on the remote peer.
+Pear (desktop runtime), Hyperswarm, `hypercore-crypto`, `b4a`, Dockerode, `dotenv`, `node-fetch`, xterm.js, Bootstrap. Tests use [brittle](https://github.com/holepunchto/brittle).
 
-- **Container Duplication**:
-  - Clone containers with custom configurations for CPUs, memory, network mode, and hostname.
+## Prerequisites
 
-- **Template Deployment**:
-  - Deploy containers using templates fetched from a remote repository.
-  - Customize deployment parameters such as ports, volumes, and environment variables.
-
-- **Container Logs**:
-  - View real-time and historical logs of containers.
-
-- **Live Statistics Streaming**:
-  - Broadcast CPU, memory, and network stats in real-time to connected peers.
-
-### Client-Side
-
-- **Peer-to-Peer Networking**:
-  - Connects to servers using unique server keys via Hyperswarm.
-  - Fully decentralized; no central server is required.
-
-- **Interactive User Interface**:
-  - Modern, responsive UI built with **Bootstrap**.
-  - Integrated terminal viewer powered by **Xterm.js**.
-  - Real-time container stats displayed for each container.
-  - View container logs directly from the UI.
-  - Deploy containers using templates with a user-friendly wizard.
-
-- **Production Deployment**:
-  - Ready-to-use client app available via Pear runtime:
-    ```bash
-    pear run pear://7to8bzrk53ab5ufwauqcw57s1kxmuykcgoefa4wo
-    ```
-
----
-
-## How It Works
-
-### Server Key Architecture
-
-The server is initialized with a `SERVER_KEY` that uniquely identifies the network. This key is essential for peers to connect and interact with the server.
-
-- **Key Generation**:
-  - On the first run, the server checks for an existing `SERVER_KEY` in the `.env` file. If absent, a new key is generated:
-    ```javascript
-    function generateNewKey() {
-      const newKey = crypto.randomBytes(32);
-      fs.appendFileSync('.env', `SERVER_KEY=${newKey.toString('hex')}\n`, { flag: 'a' });
-      return newKey;
-    }
-    ```
-  - The key is saved to `.env` for persistence.
-
-- **Key Usage**:
-  - The server uses the key to generate a topic buffer for Hyperswarm:
-    ```javascript
-    const topic = Buffer.from(keyHex, 'hex');
-    swarm.join(topic, { server: true, client: false });
-    ```
-
-- **Key Refresh**:
-  - To regenerate the key, delete the `.env` file and restart the server.
-
-### Peer Connections
-
-Peers connect to the server using the unique topic derived from the `SERVER_KEY`. The Hyperswarm network ensures secure, low-latency connections.
-
-- **Connecting**:
-  - Each client app connects to the server by joining the topic buffer:
-    ```javascript
-    const topicBuffer = b4a.from(topicHex, 'hex');
-    swarm.join(topicBuffer, { client: true, server: true });
-    ```
-
-- **Communication**:
-  - Commands (e.g., `listContainers`, `startContainer`) are sent as JSON over the connection.
-  - Responses and real-time updates are broadcast back to peers.
-
-### Docker Integration
-
-The server interacts with Docker using **Dockerode**:
-
-- **List Containers**:
-  ```javascript
-  const containers = await docker.listContainers({ all: true });
-  ```
-- **Start a Container**:
-  ```javascript
-  await docker.getContainer(containerId).start();
-  ```
-- **Stream Statistics**:
-  ```javascript
-  container.stats({ stream: true }, (err, stream) => {
-    stream.on('data', (data) => {
-      const stats = JSON.parse(data.toString());
-      broadcastToPeers({ type: 'stats', data: stats });
-    });
-  });
-  ```
-- **Docker CLI Commands**:
-  - Execute Docker commands received from the client within controlled parameters to ensure security.
-
----
+- Docker, running, and accessible by the user running the server (on Linux: `sudo usermod -aG docker $USER`, then log out/in). The server uses `/var/run/docker.sock`, or the Docker Desktop named pipe on Windows.
+- Node.js (v16+)
+- Pear runtime for the client: `npm install -g pear`
+- For GPU tracking: the GPU registry API listening on `localhost:8282` (optional — errors are logged if it is unavailable)
 
 ## Installation
 
-### Prerequisites
+```bash
+npm install
+```
 
-1. **Docker**:
-   - Install Docker and ensure it is running.
-   - For Linux, add your user to the Docker group:
-     ```bash
-     sudo usermod -aG docker $USER
-     ```
-     Log out and back in for changes to take effect.
+`server/` has no `package.json` of its own. The server also imports `hypercore-crypto`, which is not listed in the root `package.json`, so install it if it is missing:
 
-2. **Node.js**:
-   - Install Node.js v16 or higher:
-     ```bash
-     sudo apt install nodejs npm
-     ```
+```bash
+npm install hypercore-crypto
+```
 
-3. **Pear**:
-   - Install the Pear runtime for running the client and server:
-     ```bash
-     npm install -g pear
-     ```
+## Running
 
----
+### Server
 
-### Server Setup
+```bash
+cd server
+node server.js            # load SERVER_KEY from .env, or generate one
+node server.js --new      # generate and save a new SERVER_KEY
+node server.js --time 3600  # shut down 3600 s after a peer connects
+```
 
-1. **Clone the Repository**:
-   ```bash
-   git clone https://git.ssh.surf/snxraven/peardock.git
-   cd peardock
-   ```
+The server prints its topic (the server key); give it to the client to connect.
 
-2. **Change to Server Directory**:
-   ```bash
-   cd server
-   ```
+### Client
 
-3. **Install Dependencies**:
-   ```bash
-   npm install hyperswarm dockerode hypercore-crypto stream dotenv
-   ```
+```bash
+npm run dev               # pear run -d .
+```
 
-4. **Run the Server**:
-   ```bash
-   node server.js
-   ```
+Then add a connection in the app and enter the server key.
 
----
+## Configuration
 
-### Client Setup
+| Variable | Where | Description |
+| --- | --- | --- |
+| `SERVER_KEY` | `server/.env` (loaded with `dotenv`) | Hex-encoded 32-byte key that defines the Hyperswarm topic. Created automatically if missing. |
 
-1. **For Development**, run:
-   ```bash
-   pear run --dev .
-   ```
+The `.env` file holds the server key and should not be committed; anyone with the key can control the Docker host.
 
-2. **For Production**, use the pre-deployed Pear app:
-   ```bash
-   pear run pear://7to8bzrk53ab5ufwauqcw57s1kxmuykc9b8cdnjicaqcgoefa4wo
-   ```
+## Scripts
 
----
+| Script | Command |
+| --- | --- |
+| `npm run dev` | `pear run -d .` — run the client in development mode |
+| `npm test` | `brittle test/*.test.js` (the test file currently contains no tests) |
 
-## Usage
+## Project structure
 
-### Connecting to a Server
-
-1. Launch the client app.
-2. Enter the server's `SERVER_KEY` in the connection form to join its topic.
-
-### Managing Containers
-
-- **Listing Containers**:
-  - View all containers (running and stopped) with their statuses.
-
-- **Starting/Stopping/Restarting Containers**:
-  - Use the action buttons (play, stop, restart icons) in the container list.
-
-- **Removing Containers**:
-  - Click the trash icon to delete a container.
-
-- **Viewing Container Logs**:
-  - Click the logs icon to view real-time and historical logs of a container.
-
-- **Duplicating Containers**:
-  - Click the clone icon and customize the duplication form.
-
-### Terminal Access
-
-- **Container Terminal**:
-  - Open terminals for running containers by clicking the terminal icon.
-  - Switch between sessions using the tray at the bottom.
-
-- **Docker CLI Terminal**:
-  - Access a Docker CLI terminal to execute Docker commands on the remote peer.
-  - Click the Docker terminal icon in the connection list.
-
-### Template Deployment
-
-- **Deploying from Templates**:
-  - Open the template deployment modal by clicking the deploy template icon.
-  - Search and select templates from the list.
-  - Customize deployment parameters such as container name, image, ports, volumes, and environment variables.
-  - Deploy the container with the specified settings.
-
----
+```
+index.html             Client UI (Pear desktop app entry)
+app.js                 Client logic: Hyperswarm connection, container list, stats, actions
+libs/terminal.js       Container terminal sessions (xterm.js)
+libs/dockerTerminal.js Docker CLI terminal
+libs/templateDeploy.js Template list and deploy modal
+server/server.js       Server: key management, GPU registry calls, Docker command handling
+screenshots/           UI screenshots
+test/                  brittle test entry
+```
 
 ## Screenshots
 
-### Welcome Screen
+| | |
+| --- | --- |
+| ![Welcome screen](screenshots/screenshot-0.png) | ![Container list](screenshots/screenshot-1.png) |
+| ![Template list](screenshots/screenshot-2.png) | ![Deploy modal](screenshots/screenshot-3.png) |
+| ![Duplicate container](screenshots/screenshot-4.png) | ![Container logs](screenshots/screenshot-5.png) |
 
+## Security notes
 
-*The initial welcome screen guiding users to add a connection.*
-
----
-
-### Container List
-
-
-
-*Displaying all Docker containers with real-time stats and action buttons.*
-
----
-
-### Template Deployments
-
-
-
-*Browsing and selecting templates for deployment from a remote repository.*
-
----
-
-### Final Deploy Modal
-
-
-
-*Customizing deployment parameters before launching a new container.*
-
----
-
-### Duplicate Container Form
-
-
-*Duplicating an existing container with options to modify configurations.*
-
----
-
-### Container Logs
-
-
-
-*Viewing real-time logs of a container directly from the UI.*
-
----
-
-## Customization
-
-### UI Customization
-
-- Modify the layout and styling in `index.html` and the embedded CSS.
-
-### Terminal Behavior
-
-- Adjust terminal settings in `libs/terminal.js`:
-  ```javascript
-  const xterm = new Terminal({
-    cursorBlink: true,
-    theme: { background: '#1a1a1a', foreground: '#ffffff' },
-  });
-  ```
-
-### Docker Commands
-
-- Add new commands in `server/server.js` under the `switch` statement for additional Docker functionalities:
-  ```javascript
-  switch (parsedData.command) {
-    case 'newCommand':
-      // Implement your command logic here
-      break;
-    // Existing cases...
-  }
-  ```
-
----
-
-## Security
-
-- The `SERVER_KEY` is sensitive and should be stored securely.
-- Refresh the key periodically to enhance security, especially in untrusted environments.
-- peardock uses encrypted peer-to-peer connections, but it's recommended to run it within secure networks.
-- Limit access to the server by controlling who has the `SERVER_KEY`.
-
----
-
-## Troubleshooting
-
-### Common Issues
-
-1. **Unable to Connect**:
-   - Verify the `SERVER_KEY` matches on both server and client.
-   - Ensure the server is running and accessible.
-   - Check network configurations and firewall settings.
-
-2. **Docker Errors**:
-   - Ensure Docker is running and properly configured.
-   - Check permissions to manage Docker.
-   - Verify that the user running the server has access to the Docker daemon.
-
-3. **Terminal Issues**:
-   - Verify the container has a valid shell (e.g., `/bin/bash`).
-   - Ensure that the container is running before opening a terminal.
-   - Check for network latency that might affect terminal responsiveness.
-
-4. **Template Deployment Failures**:
-   - Ensure the Docker image specified in the template is valid and accessible.
-   - Check network connectivity if pulling images from remote repositories.
-   - Validate all required parameters in the deployment form.
-
----
-
-## Contributing
-
-Contributions are welcome! Fork the repository, make your changes, and submit a pull request.
-
-1. **Fork the Repository**:
-   - Click the "Fork" button at the top of the repository page.
-
-2. **Clone Your Fork**:
-   ```bash
-   git clone https://github.com/your-username/project-name.git
-   ```
-
-3. **Create a Branch for Your Feature**:
-   ```bash
-   git checkout -b feature/your-feature-name
-   ```
-
-4. **Make Changes and Commit**:
-   ```bash
-   git add .
-   git commit -m "Add your feature"
-   ```
-
-5. **Push to Your Fork**:
-   ```bash
-   git push origin feature/your-feature-name
-   ```
-
-6. **Submit a Pull Request**:
-   - Go to your fork on GitHub and click the "New pull request" button.
-
----
+- Treat `SERVER_KEY` like a credential: anyone who has it can manage containers and open shells on the host.
+- Rotate it with `--new` if it is exposed.
 
 ## Acknowledgments
 
-- **Portainer**: For inspiring the creation of a powerful Docker management tool.
-- **Hyperswarm**: Providing the peer-to-peer networking backbone.
-- **Dockerode**: Facilitating Docker API interactions in Node.js.
+Based on peardock. Built with Hyperswarm and Dockerode; inspired by Portainer.
 
----
+## License
 
-## Contact
-
+Apache-2.0 (per `package.json`).
